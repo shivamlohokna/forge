@@ -1,0 +1,30 @@
+{
+  "name": "GitHubReleasePipeline",
+  "description": "Example workflow utilizing third-party tasks from the forge-github plugin",
+  "parameters": {
+    "version": "1.0.0"
+  },
+  "tasks": [
+    {
+      "id": "write_changelog",
+      "type": "file",
+      "description": "Generates release changelog notes",
+      "params": {
+        "operation": "write",
+        "path": "workspace_plugin/CHANGELOG.md",
+        "content": "# Release 1.0.0\n\n- Public release readiness\n- Complete documentation\n"
+      }
+    },
+    {
+      "id": "create_release_issue",
+      "type": "github.create_issue",
+      "description": "Opens release tracking issue on GitHub",
+      "depends_on": ["write_changelog"],
+      "params": {
+        "repository": "octocat/Hello-World",
+        "title": "Release 1.0.0 Tracking Issue",
+        "body": "Automated release checklist initiated by Forge pipeline."
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "BasicDeclarativePipeline",
+  "description": "Demonstrates file manipulation and subprocess execution in declarative JSON",
+  "parameters": {
+    "environment": "production"
+  },
+  "tasks": [
+    {
+      "id": "write_initial_data",
+      "type": "file",
+      "description": "Creates initial seed data on disk",
+      "params": {
+        "operation": "write",
+        "path": "workspace_basic/seed.txt",
+        "content": "Hello from Forge Declarative JSON Workflow!\nBuild Date: 2026-09-19\n"
+      }
+    },
+    {
+      "id": "process_with_shell",
+      "type": "shell",
+      "description": "Transforms upstream data via Python standard input subprocess",
+      "depends_on": ["write_initial_data"],
+      "from_upstream": "write_initial_data",
+      "params": {
+        "command": "python -c \"import sys; data = sys.stdin.read(); print('=== PROCESSED REPORT ===\\n' + data.upper().strip())\""
+      }
+    },
+    {
+      "id": "save_processed_report",
+      "type": "file",
+      "description": "Writes transformed shell output to final destination",
+      "depends_on": ["process_with_shell"],
+      "from_upstream": "process_with_shell",
+      "params": {
+        "operation": "write",
+        "path": "workspace_basic/final_report.txt"
+      }
+    }
+  ]
+}
