@@ -40,7 +40,7 @@ def test_pyproject_metadata():
     assert project.get("name") == "forge"
     assert project.get("version") == "0.2.0"
     assert project.get("description") == "Serious Python Workflow Automation and Execution Platform"
-    assert project.get("requires-python") == ">=3.10"
+    assert project.get("requires-python") == ">=3.11"
     assert project.get("license") == "Apache-2.0"
     assert project.get("dependencies") == []
 
@@ -65,7 +65,7 @@ def test_forge_github_pyproject_metadata():
     project = data.get("project", {})
     assert project.get("name") == "forge-github"
     assert project.get("version") == "0.1.0"
-    assert project.get("requires-python") == ">=3.10"
+    assert project.get("requires-python") == ">=3.11"
     assert project.get("license") == "Apache-2.0"
     assert project.get("dependencies") == []
 

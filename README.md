@@ -50,7 +50,7 @@ from forge import Engine, FileTask, FunctionTask, ShellTask, Workflow
 # 1. Define tasks
 t1 = FunctionTask(
     "GenerateReportData",
-    fn=lambda ctx: {"project": "Forge 1.0", "status": "Ready for Release"},
+    fn=lambda ctx: {"project": "Forge 0.2.0", "status": "Ready for Release"},
     description="Generates release metadata dictionary",
 )
 
@@ -210,7 +210,7 @@ Once installed, plugin task types (such as `github.create_issue`) are automatica
   "type": "github.create_issue",
   "params": {
     "repository": "octocat/Hello-World",
-    "title": "Release 1.0.0 is live"
+    "title": "Release 0.2.0 is live"
   }
 }
 ```
