@@ -544,7 +544,7 @@ class ExecutionStore:
                     SELECT {self._WORKFLOW_RUN_COLUMNS}
                     FROM workflow_runs
                     WHERE workflow_id = ?
-                    ORDER BY started_at DESC
+                    ORDER BY started_at DESC, rowid DESC
                     LIMIT 1
                     """,
                     (run_id,),
@@ -589,7 +589,7 @@ class ExecutionStore:
                 SELECT {self._WORKFLOW_RUN_COLUMNS}
                 FROM workflow_runs
                 {where}
-                ORDER BY started_at DESC
+                ORDER BY started_at DESC, rowid DESC
                 LIMIT ? OFFSET ?
                 """,
                 params,
@@ -622,7 +622,7 @@ class ExecutionStore:
                     SELECT run_id
                     FROM workflow_runs
                     WHERE workflow_id = ?
-                    ORDER BY started_at DESC
+                    ORDER BY started_at DESC, rowid DESC
                     LIMIT 1
                     """,
                     (run_id,),

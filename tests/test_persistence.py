@@ -734,6 +734,30 @@ class TestEngineIntegration:
         assert runs[1].run_id == r1.run_id
         assert runs[1].workflow_id == r1.workflow_id
 
+    def test_list_runs_equal_timestamps_deterministic_ordering(self) -> None:
+        """list_workflow_runs() uses insertion order (rowid) when started_at timestamps tie."""
+        store = ExecutionStore.in_memory()
+        same_time = "2026-01-01T12:00:00.000000+00:00"
+
+        rec1 = store.create_workflow_run(
+            run_id="run_first_inserted",
+            workflow_id="wf_tied_1",
+            workflow_name="TieTest",
+            status="SUCCESS",
+            started_at=same_time,
+        )
+        rec2 = store.create_workflow_run(
+            run_id="run_second_inserted",
+            workflow_id="wf_tied_2",
+            workflow_name="TieTest",
+            status="SUCCESS",
+            started_at=same_time,
+        )
+
+        runs = store.list_workflow_runs(workflow_name="TieTest")
+        assert runs[0].run_id == rec2.run_id
+        assert runs[1].run_id == rec1.run_id
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5.5  Recovery groundwork
