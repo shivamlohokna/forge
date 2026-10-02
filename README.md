@@ -103,17 +103,18 @@ This creates:
 - `forge.toml` — Project configuration
 - `workflow.json` — Runnable starter workflow
 
-### 3. Validate the Workflow
+### 3. Preview & Validate the Workflow
 
-Check the workflow for missing dependencies or cycle errors without running it:
+Preview the execution plan without side effects (dry-run preflight check):
+
+```bash
+forge plan workflow.json
+```
+
+Validate the workflow for missing dependencies or cycle errors without running it:
 
 ```bash
 forge validate workflow.json
-```
-
-Output:
-```text
-Workflow 'QuickstartPipeline' is valid (3 tasks).
 ```
 
 ### 4. Run the Workflow
@@ -289,6 +290,8 @@ Once installed, plugin task types are automatically discovered and can be used d
 ## Technical Documentation & Architecture
 
 For in-depth specs and guides:
+- [Workflow Authoring Guide](docs/WORKFLOW_AUTHORING.md)
+- [Workflow Authoring Audit](docs/WORKFLOW_AUTHORING_AUDIT.md)
 - [Configuration Guide](docs/CONFIGURATION.md)
 - [Declarative Specification](docs/DECLARATIVE_SPEC.md)
 - [Plugin Authoring Guide](docs/PLUGINS.md)

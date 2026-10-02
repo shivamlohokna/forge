@@ -102,7 +102,7 @@ def validate_workflow_dict(data: dict[str, Any], registry: TaskRegistry) -> None
         if clean_type not in registry:
             known = ", ".join(registry.list_types()) or "(none)"
             raise WorkflowSpecError(
-                f"{path_prefix}.type: unknown task type '{clean_type}' for task '{clean_id}'. Registered types: {known}."
+                f"{path_prefix}.type: unknown task type '{clean_type}' for task '{clean_id}'. Registered types: {known}.\nNext step: Run 'forge tasks' to view registered task types."
             )
 
         # Validate failure strategy if present

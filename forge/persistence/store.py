@@ -543,11 +543,11 @@ class ExecutionStore:
                     f"""
                     SELECT {self._WORKFLOW_RUN_COLUMNS}
                     FROM workflow_runs
-                    WHERE workflow_id = ?
+                    WHERE workflow_id = ? OR workflow_name = ?
                     ORDER BY started_at DESC, rowid DESC
                     LIMIT 1
                     """,
-                    (run_id,),
+                    (run_id, run_id),
                 ).fetchone()
 
         return WorkflowRunRecord.from_row(row) if row else None

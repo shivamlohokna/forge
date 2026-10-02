@@ -610,15 +610,18 @@ def init_command(target_dir: str | Path = ".") -> int:
         skipped.append("workflow.json (already exists)")
 
     print(f"\n[forge] Initialized project in '{dest}'")
-    for item in created:
-        print(f"  + Created {item}")
+    if "forge.toml" in created:
+        print("  + Created forge.toml    (Project settings, persistence DB path, worker count)")
+    if "workflow.json" in created:
+        print("  + Created workflow.json (Starter pipeline: prepare_data -> verify_data -> save_report)")
     for item in skipped:
         print(f"  ~ Skipped {item}")
 
     print("\nNext steps:")
-    print("  1. Validate workflow: forge validate workflow.json")
-    print("  2. Run workflow:      forge run workflow.json")
-    print("  3. View history:      forge history\n")
+    print("  1. Preview execution plan: forge plan workflow.json")
+    print("  2. Validate DAG structure: forge validate workflow.json")
+    print("  3. Execute workflow:       forge run workflow.json")
+    print("  4. Inspect run history:    forge history (stored in .forge/ execution store)\n")
     return 0
 
 
@@ -738,8 +741,146 @@ def doctor_command(
 # tasks
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+# plan
+# --------------------------------------------------------------------------- #
+
+def _get_task_type_and_params(task: Any) -> tuple[str, dict[str, Any]]:
+    t_type = getattr(task, "task_type", None)
+    if not t_type:
+        name = task.__class__.__name__
+        if name.endswith("Task"):
+            name = name[:-4]
+        t_type = name.lower()
+
+    raw_params: dict[str, Any] = {}
+    if hasattr(task, "params") and isinstance(task.params, dict):
+        raw_params = dict(task.params)
+    else:
+        from enum import Enum
+        for attr in ("operation", "path", "source", "destination", "command", "url", "method", "from_upstream"):
+            val = getattr(task, attr, None)
+            if val is not None:
+                if isinstance(val, Enum):
+                    val = val.value
+                raw_params[attr] = str(val)
+
+    params_summary = {}
+    for k, v in raw_params.items():
+        if k in ("content", "stdin"):
+            params_summary[k] = f"<{len(str(v))} chars>"
+        else:
+            params_summary[k] = v
+
+    return t_type, params_summary
+
+
+def plan_command(
+    workflow_file: str | Path,
+    output_format: str = "table",
+) -> int:
+    """Preview execution plan for a workflow without executing tasks.
+
+    Args:
+        workflow_file: Path to workflow definition file (.py, .json, .toml, .yaml).
+        output_format: "table" or "json".
+
+    Returns:
+        int: 0 on success, 2 on load/config error, 3 on validation error.
+    """
+    try:
+        workflow = load_workflow(workflow_file)
+    except (CircularDependencyError, MissingDependencyError) as e:
+        print(f"Validation error in workflow: {e}", file=sys.stderr)
+        return 3
+    except LoadError as e:
+        if isinstance(e.__cause__, (CircularDependencyError, MissingDependencyError, WorkflowSpecError)):
+            print(f"Validation error in workflow: {e}", file=sys.stderr)
+            return 3
+        print(f"Error loading workflow: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Unexpected error loading workflow: {e}", file=sys.stderr)
+        return 2
+
+    try:
+        batches = workflow.get_execution_batches()
+    except (CircularDependencyError, MissingDependencyError) as e:
+        print(f"Validation error in workflow DAG: {e}", file=sys.stderr)
+        return 3
+    except Exception as e:
+        print(f"Error computing execution plan: {e}", file=sys.stderr)
+        return 2
+
+    total_tasks = len(workflow.tasks)
+    total_batches = len(batches)
+
+    formatted_batches = []
+    task_counter = 1
+    for batch_idx, batch in enumerate(batches, start=1):
+        batch_tasks = []
+        for task in batch:
+            deps = sorted([d.task_id for d in task.dependencies])
+            t_type, params_summary = _get_task_type_and_params(task)
+
+            task_info = {
+                "step": task_counter,
+                "task_id": task.task_id,
+                "task_type": t_type,
+                "depends_on": deps,
+                "params": params_summary,
+            }
+            batch_tasks.append(task_info)
+            task_counter += 1
+        formatted_batches.append({
+            "batch_number": batch_idx,
+            "tasks": batch_tasks,
+        })
+
+    if output_format == "json":
+        plan_data = {
+            "workflow_id": workflow.workflow_id,
+            "workflow_name": workflow.name,
+            "description": workflow.description or "",
+            "total_tasks": total_tasks,
+            "total_batches": total_batches,
+            "valid": True,
+            "batches": formatted_batches,
+        }
+        print(json.dumps(plan_data, indent=2))
+        return 0
+
+    print(f"\nWorkflow Plan: {workflow.name}")
+    print("=" * (15 + len(workflow.name)))
+    if workflow.description:
+        print(f"Description: {workflow.description}")
+    print(f"\nExecution Plan ({total_tasks} tasks across {total_batches} batch{'es' if total_batches != 1 else ''}):\n")
+
+    for b in formatted_batches:
+        print(f"  Batch {b['batch_number']}:")
+        for t in b["tasks"]:
+            deps_str = ", ".join(t["depends_on"]) if t["depends_on"] else "(none)"
+            print(f"    {t['step']}. {t['task_id']}")
+            print(f"       type:       {t['task_type']}")
+            print(f"       depends on: {deps_str}")
+            if t["params"]:
+                p_str = ", ".join(f"{k}={v!r}" for k, v in t["params"].items())
+                print(f"       parameters: {p_str}")
+        print()
+
+    print("Preflight Safety Summary:")
+    print("  [OK] Execution DAG is valid (no cycles, no missing dependencies)")
+    print(f"  [OK] {total_tasks} tasks scheduled for execution")
+    print("  [OK] Dry run complete - no side effects created, no history stored\n")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# tasks
+# --------------------------------------------------------------------------- #
+
 def tasks_command(output_format: str = "table") -> int:
-    """List available task types in the system.
+    """List available task types in the system with detailed schemas and examples.
 
     Args:
         output_format: "table" or "json".
@@ -758,53 +899,99 @@ def tasks_command(output_format: str = "table") -> int:
     except Exception:
         pass
 
-    task_docs = {
-        "function": {
-            "description": "Executes in-memory Python callables with context inspection",
-            "source": "built-in",
-            "key_params": "fn, description",
-        },
+    task_details = {
         "file": {
-            "description": "Atomic filesystem operations (read, write, copy, move, delete)",
+            "purpose": "Perform atomic filesystem operations.",
             "source": "built-in",
-            "key_params": "operation, path, content, source, destination",
+            "operations": ["read", "write", "copy", "move", "delete"],
+            "key_params": ["operation", "path", "content", "source", "destination", "encoding"],
+            "example": {
+                "id": "write_report",
+                "type": "file",
+                "params": {
+                    "operation": "write",
+                    "path": "output/report.txt",
+                    "content": "Execution completed successfully."
+                }
+            }
         },
         "shell": {
-            "description": "Subprocess command execution with stdout/stderr capture",
+            "purpose": "Execute OS subprocess commands with stdout/stderr capture.",
             "source": "built-in",
-            "key_params": "command, cwd, env, stdin, allowed_exit_codes",
+            "operations": ["exec"],
+            "key_params": ["command", "cwd", "env", "stdin", "allowed_exit_codes", "timeout"],
+            "example": {
+                "id": "run_test_suite",
+                "type": "shell",
+                "params": {
+                    "command": "pytest --tb=short",
+                    "allowed_exit_codes": [0]
+                }
+            }
         },
         "http": {
-            "description": "REST/HTTP client request execution with status check",
+            "purpose": "Execute REST/HTTP requests with status validation.",
             "source": "built-in",
-            "key_params": "url, method, headers, json_data, expected_status",
+            "operations": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+            "key_params": ["url", "method", "headers", "json_data", "expected_status"],
+            "example": {
+                "id": "fetch_status",
+                "type": "http",
+                "params": {
+                    "url": "https://httpbin.org/get",
+                    "method": "GET",
+                    "expected_status": [200]
+                }
+            }
+        },
+        "function": {
+            "purpose": "Execute in-memory Python callables (Python API only).",
+            "source": "built-in",
+            "operations": ["call"],
+            "key_params": ["fn", "description"],
+            "example": {
+                "id": "process_memory",
+                "type": "function",
+                "params": {"description": "Custom python function"}
+            }
         },
     }
 
     result = []
     for t_type in reg.list_types():
-        info = task_docs.get(t_type, {
-            "description": "Extension plugin task type",
+        info = task_details.get(t_type, {
+            "purpose": "Extension plugin task type.",
             "source": "plugin",
-            "key_params": "params",
+            "operations": ["custom"],
+            "key_params": ["params"],
+            "example": {"id": f"plugin_{t_type}", "type": t_type, "params": {}}
         })
         result.append({
             "type": t_type,
             "source": info["source"],
-            "description": info["description"],
-            "key_params": info["key_params"],
+            "description": info["purpose"],
+            "purpose": info["purpose"],
+            "operations": info["operations"],
+            "key_params": ", ".join(info["key_params"]) if isinstance(info["key_params"], list) else info["key_params"],
+            "example": info["example"],
         })
 
     if output_format == "json":
         print(json.dumps(result, indent=2))
     else:
         print("\nAvailable Task Types:")
-        header = f"  {'TYPE':<12} {'SOURCE':<10} {'DESCRIPTION':<55}"
-        print(header)
-        print("  " + "-" * (len(header) - 2))
+        print("===========================\n")
         for item in result:
-            print(f"  {item['type']:<12} {item['source']:<10} {item['description']:<55}")
-        print("\nUse these task types in declarative workflow specifications (.json / .toml / .yaml).\n")
+            print(f"  * Task Type: {item['type']}  ({item['source']})")
+            print(f"  Purpose:    {item['purpose']}")
+            print(f"  Operations: {', '.join(item['operations'])}")
+            print(f"  Key Params: {item['key_params']}")
+            print("  Minimal Example:")
+            ex_lines = json.dumps(item["example"], indent=4).splitlines()
+            for line in ex_lines:
+                print(f"    {line}")
+            print()
+        print("Use these task types in declarative workflow files (.json / .toml / .yaml).\n")
     return 0
 
 
@@ -814,18 +1001,20 @@ def tasks_command(output_format: str = "table") -> int:
 
 def examples_command(
     copy_name: str | None = None,
+    show_name: str | None = None,
     target_path: str | Path | None = None,
     output_format: str = "table",
 ) -> int:
-    """List or copy runnable workflow examples.
+    """List, inspect, or copy runnable workflow examples.
 
     Args:
         copy_name: Name of example to copy (e.g. "quickstart").
+        show_name: Name of example to inspect/show detailed recipe for.
         target_path: Destination path for copy.
         output_format: "table" or "json".
 
     Returns:
-        int: 0 on success, 2 if copy_name not found.
+        int: 0 on success, 2 if name not found.
     """
     pkg_resources_dir = Path(__file__).resolve().parent.parent / "resources" / "examples"
     repo_examples_dir = Path(__file__).resolve().parent.parent.parent / "examples"
@@ -833,41 +1022,155 @@ def examples_command(
 
     catalog = {
         "quickstart": {
+            "name": "quickstart",
+            "category": "Getting Started",
             "file": examples_dir / "quickstart.json",
-            "description": "Canonical beginner workflow (prepare, verify, save report)",
-            "classification": "standalone",
+            "classification": "Standalone (Runs offline)",
+            "summary": "Canonical 3-step pipeline (prepare, verify, save report)",
+            "problem": "Verify Forge installation and test basic DAG task chaining.",
+            "what_forge_does": [
+                "1. prepare_data (file): Writes seed JSON data to data/input.json",
+                "2. verify_data (file): Reads data/input.json to verify content",
+                "3. save_report (file): Writes summary report to data/report.json"
+            ],
+            "what_you_need": ["Python 3.11+", "Forge installed"],
+            "run_command": "forge run workflow.json",
+            "what_you_will_see": "Execution summary with 3 succeeded tasks and report written to data/report.json.",
+            "how_to_customize": "Edit target paths or add downstream processing tasks.",
+            "what_can_go_wrong": "File write permission issues in target directory."
         },
         "quickstart_python": {
+            "name": "quickstart_python",
+            "category": "Getting Started",
             "file": examples_dir / "quickstart.py",
-            "description": "Canonical beginner workflow in Python API format",
-            "classification": "standalone",
+            "classification": "Standalone (Runs offline)",
+            "summary": "Canonical beginner workflow in Python API format",
+            "problem": "Build workflows programmatically using Python code.",
+            "what_forge_does": [
+                "1. Defines FunctionTask callables in Python",
+                "2. Wires DAG dependencies using add_dependency()",
+                "3. Executes workflow via Engine()"
+            ],
+            "what_you_need": ["Python 3.11+", "Forge installed"],
+            "run_command": "python quickstart.py",
+            "what_you_will_see": "Python execution output and task results.",
+            "how_to_customize": "Add custom Python functions and wire them into the DAG.",
+            "what_can_go_wrong": "Unhandled exceptions inside custom Python functions."
         },
         "build_test": {
+            "name": "build_test",
+            "category": "Developer Automation",
             "file": examples_dir / "declarative" / "build_test.json",
-            "description": "Cross-platform project build and test automation workflow",
-            "classification": "standalone",
+            "classification": "Standalone (Runs offline)",
+            "summary": "Cross-platform project build and test automation workflow",
+            "problem": "Automate project build configuration, test execution, and artifact generation.",
+            "what_forge_does": [
+                "1. write_config (file): Writes build/config.json",
+                "2. run_tests (shell): Runs automated tests via subprocess",
+                "3. generate_artifact (file): Creates build/artifact.txt"
+            ],
+            "what_you_need": ["Python 3.11+", "Shell execution environment"],
+            "run_command": "forge run build_test.json",
+            "what_you_will_see": "Automated test output and build artifact file.",
+            "how_to_customize": "Replace test command with pytest, npm test, or cargo test.",
+            "what_can_go_wrong": "Non-zero exit code from test runner stops artifact generation."
         },
         "file_pipeline": {
+            "name": "file_pipeline",
+            "category": "File Automation",
             "file": examples_dir / "declarative" / "file_pipeline.json",
-            "description": "Multi-stage file backup, processing, and copy workflow",
-            "classification": "standalone",
+            "classification": "Standalone (Runs offline)",
+            "summary": "Multi-stage file creation, transformation, and copy workflow",
+            "problem": "Process raw files, transform contents, and archive output files.",
+            "what_forge_does": [
+                "1. create_raw_file (file): Writes raw dataset",
+                "2. transform_data (file): Writes processed output",
+                "3. archive_data (file): Copies file into archive folder"
+            ],
+            "what_you_need": ["Local filesystem access"],
+            "run_command": "forge run file_pipeline.json",
+            "what_you_will_see": "Raw, processed, and archived dataset files.",
+            "how_to_customize": "Change target directories or add file validation tasks.",
+            "what_can_go_wrong": "Missing source file path."
         },
         "backup": {
+            "name": "backup",
+            "category": "Data & Backup",
             "file": examples_dir / "declarative" / "backup_workflow.json",
-            "description": "Automated snapshot and archive workflow",
-            "classification": "standalone",
+            "classification": "Standalone (Runs offline)",
+            "summary": "Automated snapshot and archive workflow",
+            "problem": "Create database snapshot dumps, back them up, and verify integrity.",
+            "what_forge_does": [
+                "1. prepare_source (file): Writes database dump snapshot",
+                "2. create_backup (file): Copies dump to backup directory",
+                "3. verify_backup (file): Reads backup file to verify data"
+            ],
+            "what_you_need": ["Storage filesystem access"],
+            "run_command": "forge run backup_workflow.json",
+            "what_you_will_see": "Backup file created and validated.",
+            "how_to_customize": "Point source and destination paths to your backup target.",
+            "what_can_go_wrong": "Insufficient disk space or missing backup directory."
         },
         "api_pipeline": {
+            "name": "api_pipeline",
+            "category": "API Integration",
             "file": examples_dir / "declarative" / "api_pipeline.json",
-            "description": "REST HTTP request client and storage workflow",
-            "classification": "external service",
+            "classification": "Requires external service",
+            "summary": "REST HTTP request client and response storage workflow",
+            "problem": "Fetch REST API data with retries and store payload locally.",
+            "what_forge_does": [
+                "1. fetch_http_data (http): Sends GET request with retries",
+                "2. save_api_response (file): Saves JSON payload to file"
+            ],
+            "what_you_need": ["Active network connection"],
+            "run_command": "forge run api_pipeline.json",
+            "what_you_will_see": "API JSON response saved to file.",
+            "how_to_customize": "Change target URL, HTTP headers, or request payload.",
+            "what_can_go_wrong": "Network failure or 4xx/5xx HTTP status code."
         },
         "ml_pipeline": {
+            "name": "ml_pipeline",
+            "category": "Machine Learning",
             "file": examples_dir / "declarative" / "ml_pipeline.json",
-            "description": "Simple ML feature generation, validation, and artifact pipeline",
-            "classification": "standalone",
+            "classification": "Standalone (Runs offline)",
+            "summary": "ML feature generation, validation, and artifact pipeline",
+            "problem": "Prepare ML dataset, extract features, and record evaluation metrics.",
+            "what_forge_does": [
+                "1. prepare_dataset (file): Generates synthetic CSV dataset",
+                "2. generate_features (shell): Processes CSV feature columns",
+                "3. validate_metrics (file): Writes ml/metrics.json"
+            ],
+            "what_you_need": ["Python 3.11+"],
+            "run_command": "forge run ml_pipeline.json",
+            "what_you_will_see": "Extracted features and model metrics file.",
+            "how_to_customize": "Wire in pandas/scikit-learn training scripts.",
+            "what_can_go_wrong": "Invalid CSV data format."
         },
     }
+
+    if show_name:
+        key = show_name.lower().strip()
+        if key not in catalog:
+            known = ", ".join(sorted(catalog.keys()))
+            print(f"Error: Unknown example '{show_name}'. Available examples: {known}", file=sys.stderr)
+            return 2
+        info = catalog[key]
+        print(f"\nForge Recipe: {info['name']} ({info['category']})")
+        print("=" * (14 + len(info['name']) + len(info['category'])))
+        print(f"Classification:   {info['classification']}")
+        print(f"File:             {info['file'].name}")
+        print(f"\nPROBLEM:\n  {info['problem']}")
+        print("\nWHAT FORGE DOES:")
+        for step in info['what_forge_does']:
+            print(f"  {step}")
+        print("\nWHAT YOU NEED:")
+        for req in info['what_you_need']:
+            print(f"  - {req}")
+        print(f"\nRUN IT:\n  {info['run_command']}")
+        print(f"\nWHAT YOU WILL SEE:\n  {info['what_you_will_see']}")
+        print(f"\nHOW TO CUSTOMIZE IT:\n  {info['how_to_customize']}")
+        print(f"\nWHAT CAN GO WRONG:\n  {info['what_can_go_wrong']}\n")
+        return 0
 
     if copy_name:
         key = copy_name.lower().strip()
@@ -890,6 +1193,7 @@ def examples_command(
             dest.write_bytes(source_file.read_bytes())
             print(f"[forge] Copied example '{key}' ({catalog[key]['classification']}) to '{dest}'")
             print(f"\nTo run this example:")
+            print(f"  forge plan {dest.name}")
             print(f"  forge validate {dest.name}")
             print(f"  forge run {dest.name}\n")
             return 0
@@ -901,21 +1205,30 @@ def examples_command(
         out_list = [
             {
                 "name": name,
+                "category": info["category"],
                 "file": info["file"].name,
                 "classification": info["classification"],
-                "description": info["description"],
+                "summary": info["summary"],
+                "description": info["summary"],
             }
             for name, info in catalog.items()
         ]
         print(json.dumps(out_list, indent=2))
     else:
         print("\nAvailable Runnable Workflow Examples:")
-        header = f"  {'NAME':<18} {'TYPE':<18} {'FILE':<22} {'DESCRIPTION':<45}"
-        print(header)
-        print("  " + "-" * (len(header) - 2))
+        print("======================================\n")
+        current_cat = None
         for name, info in catalog.items():
-            print(f"  {name:<18} {info['classification']:<18} {info['file'].name:<22} {info['description']:<45}")
-        print("\nRun 'forge examples --copy <name>' to copy an example into your project.\n")
+            if info["category"] != current_cat:
+                current_cat = info["category"]
+                print(f"  [{current_cat}]")
+            print(f"    * {name:<18} ({info['classification']})")
+            print(f"      File:    {info['file'].name}")
+            print(f"      Summary: {info['summary']}")
+            print()
+        print("Commands:")
+        print("  forge examples --show <name>  : Inspect recipe details (Problem, Steps, Customization)")
+        print("  forge examples --copy <name>  : Copy recipe into your project\n")
 
     return 0
 

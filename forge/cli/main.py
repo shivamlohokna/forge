@@ -13,6 +13,7 @@ from forge.cli.commands import (
     history_command,
     init_command,
     inspect_command,
+    plan_command,
     run_command,
     status_command,
     tasks_command,
@@ -125,6 +126,24 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument(
         "file",
         help="Path to the workflow file (.py, .json, .toml, .yaml)",
+    )
+
+    # ── plan ─────────────────────────────────────────────────────────────────
+    plan_parser = subparsers.add_parser(
+        "plan",
+        parents=[log_parent],
+        help="Preview execution plan for a workflow",
+        description="Dry-run preflight inspection of DAG execution order and task parameters without side effects.",
+    )
+    plan_parser.add_argument(
+        "file",
+        help="Path to the workflow file (.py, .json, .toml, .yaml)",
+    )
+    plan_parser.add_argument(
+        "--json",
+        dest="json",
+        action="store_true",
+        help="Output execution plan as JSON",
     )
 
     # ── history ──────────────────────────────────────────────────────────────
@@ -255,6 +274,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="List runnable workflow examples or copy an example into your project.",
     )
     examples_parser.add_argument(
+        "-s",
+        "--show",
+        dest="show",
+        default=None,
+        help="Inspect detailed recipe information for an example (e.g. quickstart)",
+    )
+    examples_parser.add_argument(
         "--copy",
         dest="copy",
         default=None,
@@ -319,9 +345,14 @@ def main(argv: list[str] | None = None) -> int:
                 quiet=args.quiet,
             )
 
-
         elif args.command == "validate":
             return validate_command(workflow_file=args.file)
+
+        elif args.command == "plan":
+            return plan_command(
+                workflow_file=args.file,
+                output_format="json" if args.json else "table",
+            )
 
         elif args.command == "history":
             return history_command(
@@ -357,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "examples":
             return examples_command(
                 copy_name=args.copy,
+                show_name=args.show,
                 target_path=args.target,
                 output_format="json" if args.json else "table",
             )
@@ -380,5 +412,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
