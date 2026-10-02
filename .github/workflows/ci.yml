@@ -34,6 +34,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-asyncio
           pip install -e .
+          pip install -e forge-github/
 
       - name: Run test suite
         run: python -m pytest --tb=short
@@ -56,6 +57,8 @@ jobs:
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip build wheel pytest pytest-asyncio
+          pip install -e .
+          pip install -e forge-github/
 
       - name: Build wheel package
         run: python -m build
