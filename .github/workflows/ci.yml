@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio
+          pip install -e .
+
+      - name: Run test suite
+        run: python -m pytest --tb=short
+
+  package-build:
+    name: Package Build & Golden Path Validation
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip build wheel pytest pytest-asyncio
+
+      - name: Build wheel package
+        run: python -m build
+
+      - name: Verify wheel contents
+        run: |
+          python -c "import zipfile, sys, glob; whl = glob.glob('dist/*.whl')[0]; names = zipfile.ZipFile(whl).namelist(); print('Wheel contents:', names); assert any('resources/examples' in n for n in names), 'Missing package resources in wheel'"
+
+      - name: Run release check & clean golden path verification
+        run: python scripts/release_check.py
+
+      - name: Upload wheel artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-wheel
+          path: dist/*.whl
