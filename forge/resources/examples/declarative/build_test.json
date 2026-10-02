@@ -1,0 +1,37 @@
+{
+  "name": "BuildAndTestPipeline",
+  "description": "Cross-platform project build and test automation workflow",
+  "tasks": [
+    {
+      "id": "write_config",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "build/config.json",
+        "content": "{\"build_target\": \"release\", \"version\": \"0.2.0\"}"
+      }
+    },
+    {
+      "id": "run_tests",
+      "type": "shell",
+      "depends_on": [
+        "write_config"
+      ],
+      "params": {
+        "command": "python -c \"import json, sys; sys.exit(0 if json.load(open('build/config.json'))['version'] == '0.2.0' else 1)\""
+      }
+    },
+    {
+      "id": "generate_artifact",
+      "type": "file",
+      "depends_on": [
+        "run_tests"
+      ],
+      "params": {
+        "operation": "write",
+        "path": "build/artifact.txt",
+        "content": "Build artifact generated cleanly after test pass."
+      }
+    }
+  ]
+}

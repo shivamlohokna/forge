@@ -1,0 +1,38 @@
+{
+  "name": "BackupWorkflow",
+  "description": "Automated snapshot and archive workflow",
+  "tasks": [
+    {
+      "id": "prepare_source",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "storage/db_dump.json",
+        "content": "{\"records\": [{\"id\": 1, \"value\": \"alpha\"}, {\"id\": 2, \"value\": \"beta\"}]}"
+      }
+    },
+    {
+      "id": "create_backup",
+      "type": "file",
+      "depends_on": [
+        "prepare_source"
+      ],
+      "params": {
+        "operation": "copy",
+        "source": "storage/db_dump.json",
+        "destination": "storage/backups/db_dump_backup.json"
+      }
+    },
+    {
+      "id": "verify_backup",
+      "type": "file",
+      "depends_on": [
+        "create_backup"
+      ],
+      "params": {
+        "operation": "read",
+        "path": "storage/backups/db_dump_backup.json"
+      }
+    }
+  ]
+}

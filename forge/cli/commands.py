@@ -510,3 +510,413 @@ def status_command(
         return 0
     finally:
         store.close()
+
+
+# --------------------------------------------------------------------------- #
+# init
+# --------------------------------------------------------------------------- #
+
+def init_command(target_dir: str | Path = ".") -> int:
+    """Initialize a new Forge project with sample configuration and workflow.
+
+    Args:
+        target_dir: Path to directory where project files will be created.
+
+    Returns:
+        int: 0 on success, 2 on error.
+    """
+    dest = Path(target_dir).resolve()
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"Error creating target directory '{dest}': {e}", file=sys.stderr)
+        return 2
+
+    config_path = dest / "forge.toml"
+    workflow_path = dest / "workflow.json"
+
+    created = []
+    skipped = []
+
+    if not config_path.exists():
+        config_content = (
+            "[forge]\n"
+            'database = ".forge/execution.db"\n'
+            "workers = 4\n"
+            'log_level = "INFO"\n'
+            'log_format = "text"\n\n'
+            "[logging]\n"
+            'level = "INFO"\n'
+            'format = "text"\n'
+            'file = ".forge/forge.log"\n'
+        )
+        try:
+            config_path.write_text(config_content, encoding="utf-8")
+            created.append("forge.toml")
+        except Exception as e:
+            print(f"Error writing 'forge.toml': {e}", file=sys.stderr)
+            return 2
+    else:
+        skipped.append("forge.toml (already exists)")
+
+    if not workflow_path.exists():
+        wf_content = (
+            '{\n'
+            '  "name": "QuickstartPipeline",\n'
+            '  "description": "Canonical beginner workflow: prepare, process, and save report",\n'
+            '  "tasks": [\n'
+            '    {\n'
+            '      "id": "prepare_data",\n'
+            '      "type": "file",\n'
+            '      "params": {\n'
+            '        "operation": "write",\n'
+            '        "path": "data/input.json",\n'
+            '        "content": "{\\"project\\": \\"Forge\\", \\"status\\": \\"initialized\\"}"\n'
+            '      }\n'
+            '    },\n'
+            '    {\n'
+            '      "id": "verify_data",\n'
+            '      "type": "file",\n'
+            '      "depends_on": [\n'
+            '        "prepare_data"\n'
+            '      ],\n'
+            '      "params": {\n'
+            '        "operation": "read",\n'
+            '        "path": "data/input.json"\n'
+            '      }\n'
+            '    },\n'
+            '    {\n'
+            '      "id": "save_report",\n'
+            '      "type": "file",\n'
+            '      "depends_on": [\n'
+            '        "verify_data"\n'
+            '      ],\n'
+            '      "params": {\n'
+            '        "operation": "write",\n'
+            '        "path": "data/report.json",\n'
+            '        "content": "{\\"status\\": \\"SUCCESS\\", \\"message\\": \\"Quickstart completed\\"}"\n'
+            '      }\n'
+            '    }\n'
+            '  ]\n'
+            '}\n'
+        )
+        try:
+            workflow_path.write_text(wf_content, encoding="utf-8")
+            created.append("workflow.json")
+        except Exception as e:
+            print(f"Error writing 'workflow.json': {e}", file=sys.stderr)
+            return 2
+    else:
+        skipped.append("workflow.json (already exists)")
+
+    print(f"\n[forge] Initialized project in '{dest}'")
+    for item in created:
+        print(f"  + Created {item}")
+    for item in skipped:
+        print(f"  ~ Skipped {item}")
+
+    print("\nNext steps:")
+    print("  1. Validate workflow: forge validate workflow.json")
+    print("  2. Run workflow:      forge run workflow.json")
+    print("  3. View history:      forge history\n")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# doctor
+# --------------------------------------------------------------------------- #
+
+def doctor_command(
+    db_path: str | Path | None = None,
+    output_format: str = "table",
+) -> int:
+    """Run environment, configuration, and state diagnostics.
+
+    Args:
+        db_path: Optional path to SQLite database to verify.
+        output_format: "table" or "json".
+
+    Returns:
+        int: 0 if healthy, 1 if warnings/errors found.
+    """
+    from forge import __version__
+    from forge.registry.task_registry import TaskRegistry
+    from forge.registry.builtins import register_builtin_tasks
+
+    checks = []
+
+    # 1. Python version
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    py_ok = sys.version_info >= (3, 11)
+    checks.append({
+        "name": "Python Environment",
+        "status": "OK" if py_ok else "ERROR",
+        "details": f"Python {py_ver} (>= 3.11 required)",
+    })
+
+    # 2. Forge installation
+    checks.append({
+        "name": "Forge Package",
+        "status": "OK",
+        "details": f"Forge v{__version__}",
+    })
+
+    # 3. Config resolution
+    try:
+        from forge.config import resolve_config
+        cfg = resolve_config()
+        cfg_msg = f"Resolved (workers={cfg.workers}, db={cfg.database or 'default'})"
+        cfg_ok = True
+    except Exception as exc:
+        cfg_msg = f"Config error: {exc}"
+        cfg_ok = False
+        cfg = None
+    checks.append({
+        "name": "Project Configuration",
+        "status": "OK" if cfg_ok else "ERROR",
+        "details": cfg_msg,
+    })
+
+    # 4. State & Database accessibility
+    resolved_db_path = db_path or (cfg.database if cfg and cfg.database else "forge.db")
+    target_db = Path(resolved_db_path)
+    db_ok = True
+    db_details = f"Path '{target_db}' is accessible"
+    try:
+        target_db.parent.mkdir(parents=True, exist_ok=True)
+        test_file = target_db.parent / ".forge_perm_check"
+        test_file.write_text("test", encoding="utf-8")
+        test_file.unlink(missing_ok=True)
+    except Exception as exc:
+        db_ok = False
+        db_details = f"Directory '{target_db.parent}' is not writable: {exc}"
+
+    checks.append({
+        "name": "Database & State Directory",
+        "status": "OK" if db_ok else "ERROR",
+        "details": db_details,
+    })
+
+    # 5. Task Registry & Plugin discovery
+    reg = TaskRegistry()
+    register_builtin_tasks(reg)
+    plugin_count = 0
+    try:
+        from forge.plugins import load_plugins
+        plugins = load_plugins(reg)
+        plugin_count = len(plugins)
+    except Exception:
+        pass
+
+    types_str = ", ".join(reg.list_types())
+    checks.append({
+        "name": "Task Registry & Plugins",
+        "status": "OK",
+        "details": f"{len(reg)} task type(s) available ({types_str}); {plugin_count} plugin(s) loaded",
+    })
+
+    all_ok = all(c["status"] == "OK" for c in checks)
+
+    if output_format == "json":
+        print(json.dumps({"healthy": all_ok, "checks": checks}, indent=2))
+    else:
+        print("\n  Forge Health Diagnostics")
+        print("  ========================")
+        for c in checks:
+            badge = f"[{c['status']}]"
+            print(f"  {badge:<9} {c['name']:<28} : {c['details']}")
+        print()
+        if all_ok:
+            print("  System status: All diagnostics PASSED.\n")
+        else:
+            print("  System status: One or more diagnostics FAILED.\n")
+
+    return 0 if all_ok else 1
+
+
+# --------------------------------------------------------------------------- #
+# tasks
+# --------------------------------------------------------------------------- #
+
+def tasks_command(output_format: str = "table") -> int:
+    """List available task types in the system.
+
+    Args:
+        output_format: "table" or "json".
+
+    Returns:
+        int: 0
+    """
+    from forge.registry.task_registry import TaskRegistry
+    from forge.registry.builtins import register_builtin_tasks
+
+    reg = TaskRegistry()
+    register_builtin_tasks(reg)
+    try:
+        from forge.plugins import load_plugins
+        load_plugins(reg)
+    except Exception:
+        pass
+
+    task_docs = {
+        "function": {
+            "description": "Executes in-memory Python callables with context inspection",
+            "source": "built-in",
+            "key_params": "fn, description",
+        },
+        "file": {
+            "description": "Atomic filesystem operations (read, write, copy, move, delete)",
+            "source": "built-in",
+            "key_params": "operation, path, content, source, destination",
+        },
+        "shell": {
+            "description": "Subprocess command execution with stdout/stderr capture",
+            "source": "built-in",
+            "key_params": "command, cwd, env, stdin, allowed_exit_codes",
+        },
+        "http": {
+            "description": "REST/HTTP client request execution with status check",
+            "source": "built-in",
+            "key_params": "url, method, headers, json_data, expected_status",
+        },
+    }
+
+    result = []
+    for t_type in reg.list_types():
+        info = task_docs.get(t_type, {
+            "description": "Extension plugin task type",
+            "source": "plugin",
+            "key_params": "params",
+        })
+        result.append({
+            "type": t_type,
+            "source": info["source"],
+            "description": info["description"],
+            "key_params": info["key_params"],
+        })
+
+    if output_format == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        print("\nAvailable Task Types:")
+        header = f"  {'TYPE':<12} {'SOURCE':<10} {'DESCRIPTION':<55}"
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for item in result:
+            print(f"  {item['type']:<12} {item['source']:<10} {item['description']:<55}")
+        print("\nUse these task types in declarative workflow specifications (.json / .toml / .yaml).\n")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# examples
+# --------------------------------------------------------------------------- #
+
+def examples_command(
+    copy_name: str | None = None,
+    target_path: str | Path | None = None,
+    output_format: str = "table",
+) -> int:
+    """List or copy runnable workflow examples.
+
+    Args:
+        copy_name: Name of example to copy (e.g. "quickstart").
+        target_path: Destination path for copy.
+        output_format: "table" or "json".
+
+    Returns:
+        int: 0 on success, 2 if copy_name not found.
+    """
+    pkg_resources_dir = Path(__file__).resolve().parent.parent / "resources" / "examples"
+    repo_examples_dir = Path(__file__).resolve().parent.parent.parent / "examples"
+    examples_dir = pkg_resources_dir if pkg_resources_dir.is_dir() else repo_examples_dir
+
+    catalog = {
+        "quickstart": {
+            "file": examples_dir / "quickstart.json",
+            "description": "Canonical beginner workflow (prepare, verify, save report)",
+            "classification": "standalone",
+        },
+        "quickstart_python": {
+            "file": examples_dir / "quickstart.py",
+            "description": "Canonical beginner workflow in Python API format",
+            "classification": "standalone",
+        },
+        "build_test": {
+            "file": examples_dir / "declarative" / "build_test.json",
+            "description": "Cross-platform project build and test automation workflow",
+            "classification": "standalone",
+        },
+        "file_pipeline": {
+            "file": examples_dir / "declarative" / "file_pipeline.json",
+            "description": "Multi-stage file backup, processing, and copy workflow",
+            "classification": "standalone",
+        },
+        "backup": {
+            "file": examples_dir / "declarative" / "backup_workflow.json",
+            "description": "Automated snapshot and archive workflow",
+            "classification": "standalone",
+        },
+        "api_pipeline": {
+            "file": examples_dir / "declarative" / "api_pipeline.json",
+            "description": "REST HTTP request client and storage workflow",
+            "classification": "external service",
+        },
+        "ml_pipeline": {
+            "file": examples_dir / "declarative" / "ml_pipeline.json",
+            "description": "Simple ML feature generation, validation, and artifact pipeline",
+            "classification": "standalone",
+        },
+    }
+
+    if copy_name:
+        key = copy_name.lower().strip()
+        if key not in catalog:
+            known = ", ".join(sorted(catalog.keys()))
+            print(f"Error: Unknown example '{copy_name}'. Available examples: {known}", file=sys.stderr)
+            return 2
+
+        source_file = catalog[key]["file"]
+        if not source_file.is_file():
+            print(f"Error: Example source file '{source_file}' not found.", file=sys.stderr)
+            return 2
+
+        dest = Path(target_path) if target_path else Path.cwd() / source_file.name
+        if dest.is_dir():
+            dest = dest / source_file.name
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(source_file.read_bytes())
+            print(f"[forge] Copied example '{key}' ({catalog[key]['classification']}) to '{dest}'")
+            print(f"\nTo run this example:")
+            print(f"  forge validate {dest.name}")
+            print(f"  forge run {dest.name}\n")
+            return 0
+        except Exception as e:
+            print(f"Error copying example to '{dest}': {e}", file=sys.stderr)
+            return 2
+
+    if output_format == "json":
+        out_list = [
+            {
+                "name": name,
+                "file": info["file"].name,
+                "classification": info["classification"],
+                "description": info["description"],
+            }
+            for name, info in catalog.items()
+        ]
+        print(json.dumps(out_list, indent=2))
+    else:
+        print("\nAvailable Runnable Workflow Examples:")
+        header = f"  {'NAME':<18} {'TYPE':<18} {'FILE':<22} {'DESCRIPTION':<45}"
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for name, info in catalog.items():
+            print(f"  {name:<18} {info['classification']:<18} {info['file'].name:<22} {info['description']:<45}")
+        print("\nRun 'forge examples --copy <name>' to copy an example into your project.\n")
+
+    return 0
+
+

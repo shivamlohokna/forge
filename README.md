@@ -4,28 +4,84 @@
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Typing](https://img.shields.io/badge/typing-PEP%20561-green.svg)](https://peps.python.org/pep-0561/)
 
-**Forge** is an enterprise-grade workflow orchestration engine and CLI for defining, validating, executing, persisting, and inspecting resilient DAG workflows in Python with **zero required third-party runtime dependencies**.
+---
+
+## What is Forge?
+
+**Forge** lets you describe a series of tasks you need done, then executes those tasks reliably, shows you exactly what happened, and preserves the execution results.
+
+Whether you are building data processing pipelines, build and test automation, server backup tasks, or REST API workflows, Forge handles dependency ordering, concurrent task execution, retries, and persistence with **zero third-party runtime dependencies**.
 
 ---
 
-## Key Highlights
+## What Problem Does It Solve?
 
-- **Zero Runtime Dependencies**: Built entirely on standard library primitives (`sqlite3`, `urllib`, `concurrent.futures`, `tomllib`, `importlib.metadata`).
-- **Resilient DAG Execution**: Sequential and concurrent thread-pool task scheduling, cycle detection (Kahn's algorithm), timeouts, configurable failure strategies (`STOP`, `CONTINUE`, `SKIP`, `RETRY`), and exponential backoff retry policies.
-- **Rich Built-in Task Primitives**:
-  - `FunctionTask`: Pure Python callables with context inspection and upstream result passing.
-  - `ShellTask`: Operating system subprocess execution with environment, cwd, stdin, and stdout/stderr capture.
-  - `FileTask`: Atomic file operations (write, read, copy, move, delete) with parent directory creation.
-  - `HTTPTask`: Robust HTTP/REST calls with status validation, headers, and JSON/text handling.
-- **Declarative Workflows**: Define and execute workflows in JSON and TOML (and YAML when PyYAML is installed) with pre-flight schema and safety validation.
-- **Durable Persistence**: Built-in SQLite execution store recording workflow runs, task attempts, logs, and outputs.
-- **Enterprise Observability**: Structured JSON and colorized text logging, sensitive token/credential masking, and engine event hooks.
-- **Extensible Plugin Ecosystem**: Discovers third-party task types dynamically via standard Python package entry points (`forge.plugins`).
-- **Modern CLI**: Rich command-line tools for `run`, `validate`, `history`, `inspect`, and `status`.
+Single shell scripts and ad-hoc Python scripts break easily:
+- Failures midway leave your system in an unknown partial state.
+- Retrying a failed command requires re-running everything from scratch.
+- You have no history or log of previous executions or attempt outputs.
+- Complex dependencies become unmaintainable nested code.
+
+**Forge solves this:**
+- **Deterministic DAG Scheduling**: Automatically resolves task order and detects circular dependencies.
+- **Durable History**: Every workflow execution, task status, duration, and output is saved in SQLite.
+- **Granular Retries & Timeouts**: Automatically retry flaky network/filesystem operations with linear or exponential backoff.
+- **Human-Centric CLI**: Instantly inspect status, attempt logs, and diagnostic health.
 
 ---
 
-## Installation
+## Who is it For?
+
+Forge is designed for software engineers, DevOps practitioners, and data engineers who want a lightweight, enterprise-grade workflow execution engine without the overhead of heavy cloud orchestrators like Airflow or Prefect.
+
+---
+
+## What Does a Normal Workflow Look Like?
+
+You can define workflows declaratively (**JSON**, **TOML**, or **YAML**) or programmatically in pure **Python**:
+
+```json
+{
+  "name": "DataPipeline",
+  "description": "Fetch, transform, and report",
+  "tasks": [
+    {
+      "id": "prepare_data",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "data/input.json",
+        "content": "{\"status\": \"ready\"}"
+      }
+    },
+    {
+      "id": "verify_data",
+      "type": "file",
+      "depends_on": ["prepare_data"],
+      "params": {
+        "operation": "read",
+        "path": "data/input.json"
+      }
+    },
+    {
+      "id": "save_report",
+      "type": "file",
+      "depends_on": ["verify_data"],
+      "params": {
+        "operation": "write",
+        "path": "data/report.json",
+        "content": "{\"status\": \"SUCCESS\"}"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 5-Minute Quickstart
+
+### 1. Installation
 
 Install Forge via `pip`:
 
@@ -35,147 +91,152 @@ pip install forge
 
 *(Requires Python 3.11 or newer)*
 
----
+### 2. Initialize a Project
 
-## Quick Start
-
-### 1. Python API
-
-Define a workflow DAG using task objects and intuitive dependency operators (`>>` / `<<`):
-
-```python
-import sys
-from forge import Engine, FileTask, FunctionTask, ShellTask, Workflow
-
-# 1. Define tasks
-t1 = FunctionTask(
-    "GenerateReportData",
-    fn=lambda ctx: {"project": "Forge 0.2.0", "status": "Ready for Release"},
-    description="Generates release metadata dictionary",
-)
-
-t2 = FileTask(
-    "SaveReport",
-    operation="write",
-    path="release_status.json",
-    from_upstream="GenerateReportData",
-    description="Persists payload to disk as JSON",
-)
-
-t3 = ShellTask(
-    "VerifyReport",
-    command=[sys.executable, "-c", "import json; print('Verified:', json.load(open('release_status.json'))['status'])"],
-    description="Validates written report using Python subprocess",
-)
-
-# 2. Wire the DAG
-# GenerateReportData -> SaveReport -> VerifyReport
-t1 >> t2 >> t3
-
-# 3. Assemble and execute workflow
-workflow = Workflow("ReleasePipeline")
-workflow.add_tasks(t3)  # Adding leaf tasks automatically registers dependencies!
-
-engine = Engine(verbose=True)
-result = engine.run(workflow)
-
-print(result.summary())
-```
-
-### 2. Declarative Workflow (JSON / TOML)
-
-Create a workflow file `workflow.json`:
-
-```json
-{
-  "name": "QuickstartPipeline",
-  "description": "Declarative multi-stage workflow",
-  "tasks": [
-    {
-      "id": "write_config",
-      "type": "file",
-      "params": {
-        "operation": "write",
-        "path": "app.conf",
-        "content": "ENVIRONMENT=production\nDEBUG=false\n"
-      }
-    },
-    {
-      "id": "inspect_config",
-      "type": "shell",
-      "depends_on": ["write_config"],
-      "params": {
-        "command": "cat app.conf || type app.conf"
-      }
-    }
-  ]
-}
-```
-
-Validate and run it from the command line:
+Initialize a new Forge project with standard configuration and a sample workflow:
 
 ```bash
-# Validate workflow DAG and task configurations
-forge validate workflow.json
+forge init
+```
 
-# Execute workflow
+This creates:
+- `forge.toml` — Project configuration
+- `workflow.json` — Runnable starter workflow
+
+### 3. Validate the Workflow
+
+Check the workflow for missing dependencies or cycle errors without running it:
+
+```bash
+forge validate workflow.json
+```
+
+Output:
+```text
+Workflow 'QuickstartPipeline' is valid (3 tasks).
+```
+
+### 4. Run the Workflow
+
+Execute the workflow and watch task execution in real time:
+
+```bash
 forge run workflow.json
 ```
 
----
+Output:
+```text
+=== Workflow Execution Summary: QuickstartPipeline ===
+Run ID:    run_a1b2c3d4e5f6
+Workflow:  QuickstartPipeline (id: wf_12345)
+Status:    SUCCESS
+Duration:  0.03s
+Tasks:     3 total (3 succeeded, 0 failed, 0 blocked, 0 skipped)
+-------------------------------------------------------
+  [SUCCESS]   prepare_data (id: prepare_data, attempts: 1, 0.01s)
+  [SUCCESS]   verify_data (id: verify_data, attempts: 1, 0.01s)
+  [SUCCESS]   save_report (id: save_report, attempts: 1, 0.01s)
+=======================================================
 
-## Built-in Task Primitives
-
-| Task Class | Declarative Type | Description | Key Parameters |
-| :--- | :--- | :--- | :--- |
-| `FunctionTask` | `function` *(programmatic)* | Runs an in-memory Python callable | `fn`, `description` |
-| `ShellTask` | `shell` | Executes an OS subprocess command | `command`, `cwd`, `env`, `stdin`, `allowed_exit_codes` |
-| `FileTask` | `file` | Performs atomic filesystem operations | `operation` (`read`, `write`, `copy`, `move`, `delete`), `path`, `source`, `destination`, `content` |
-| `HTTPTask` | `http` | Sends HTTP requests | `url`, `method` (`GET`, `POST`, etc.), `headers`, `json_data`, `params`, `expected_status` |
-
----
-
-## Command Line Interface (CLI)
-
-The `forge` command provides end-to-end workflow management:
-
-```bash
-# Execute a workflow (Python file or declarative JSON/TOML/YAML)
-forge run workflow.py
-forge run pipeline.json --workers 4 --db .forge/forge.db
-
-# Validate a workflow DAG without running it
-forge validate pipeline.json
-
-# View execution history
-forge history
-forge history --workflow ReleasePipeline --status SUCCESS --limit 10
-
-# Inspect detailed results and task outputs of a run
-forge inspect <run_id> --json
-
-# Display overall project execution status and statistics
-forge status
+Next steps:
+  - Run 'forge history' to view execution log.
+  - Run 'forge inspect run_a1b2c3d4e5f6' to inspect outputs.
 ```
 
-### Exit Codes
-- `0`: Success (workflow ran and all tasks succeeded / validation passed).
-- `1`: Workflow failure (one or more tasks failed under a stopping failure strategy).
-- `2`: Configuration or syntax error (invalid config file or malformed workflow file).
-- `3`: DAG validation error (circular dependency or missing dependency).
+### 5. View History & Inspect Results
+
+View past runs recorded in the local SQLite execution store:
+
+```bash
+forge history
+```
+
+Inspect attempt logs and outputs for a specific run:
+
+```bash
+forge inspect run_a1b2c3d4e5f6
+```
+
+---
+
+## CLI Discovery Features
+
+Forge includes CLI tools for self-service discovery and health diagnostics:
+
+```bash
+# Run environment and state diagnostics
+forge doctor
+
+# List available task types (built-in and installed plugins)
+forge tasks
+
+# List or copy runnable workflow examples into your project
+forge examples
+forge examples --copy build_test
+```
+
+---
+
+## Core Task Primitives
+
+| Task Type | Class | Description | Key Parameters |
+| :--- | :--- | :--- | :--- |
+| `file` | `FileTask` | Atomic filesystem operations | `operation` (`read`, `write`, `copy`, `move`, `delete`), `path`, `content`, `source`, `destination` |
+| `shell` | `ShellTask` | Subprocess execution | `command`, `cwd`, `env`, `stdin`, `allowed_exit_codes` |
+| `http` | `HTTPTask` | REST/HTTP request execution | `url`, `method`, `headers`, `json_data`, `expected_status` |
+| `function` | `FunctionTask` | Pure Python callables | `fn`, `description` *(programmatic API)* |
+
+---
+
+## Python API Usage
+
+You can also assemble DAG workflows using Python code and intuitive dependency operators (`>>` / `<<`):
+
+```python
+from forge import Engine, FileTask, FunctionTask, ShellTask, Workflow
+
+t1 = FileTask(
+    "prepare_data",
+    operation="write",
+    path="data/input.json",
+    content='{"status": "ready"}',
+)
+
+t2 = FunctionTask(
+    "process_data",
+    fn=lambda ctx: {"processed": True},
+)
+
+t3 = FileTask(
+    "save_report",
+    operation="write",
+    path="data/report.json",
+    content='{"status": "SUCCESS"}',
+)
+
+# Wire dependencies: prepare_data -> process_data -> save_report
+t1 >> t2 >> t3
+
+wf = Workflow("PythonPipeline")
+wf.add_tasks(t3)
+
+engine = Engine()
+result = engine.run(wf)
+print(result.summary())
+```
 
 ---
 
 ## Project Configuration (`forge.toml`)
 
-Configure project-level defaults in a `forge.toml` file located in your project root:
+Customize project settings in `forge.toml`:
 
 ```toml
 [forge]
 database = ".forge/execution.db"
 workers  = 4
 log_level = "INFO"
-log_format = "text" # or "json"
+log_format = "text"
 
 [logging]
 level = "INFO"
@@ -183,48 +244,55 @@ format = "text"
 file = ".forge/forge.log"
 ```
 
-Settings are resolved in the following priority order:
+Resolution precedence:
 1. **CLI flags** (`--db`, `--workers`, `--log-level`)
 2. **Environment variables** (`FORGE_DATABASE`, `FORGE_WORKERS`, `FORGE_LOG_LEVEL`)
 3. **`forge.toml` file**
 4. **Built-in defaults**
 
-For complete configuration details, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
-
 ---
 
 ## Plugin Ecosystem
 
-Forge features a pluggable task architecture. Any Python package can register custom task types using standard `pyproject.toml` entry points under the `forge.plugins` group:
+Forge supports third-party task extensions via standard Python entry points:
 
 ```toml
 [project.entry-points."forge.plugins"]
 github = "forge_github.plugin:GitHubPlugin"
 ```
 
-Once installed, plugin task types (such as `github.create_issue`) are automatically discovered and can be used directly in declarative workflows:
+Once installed, plugin task types are automatically discovered and can be used directly in declarative workflows:
 
 ```json
 {
-  "id": "open_release_issue",
+  "id": "open_issue",
   "type": "github.create_issue",
   "params": {
     "repository": "octocat/Hello-World",
-    "title": "Release 0.2.0 is live"
+    "title": "Release pipeline succeeded"
   }
 }
 ```
 
-To learn how to author your own plugins, check out [docs/PLUGINS.md](docs/PLUGINS.md).
+---
+
+## CLI Exit Codes
+
+- `0`: Success (workflow ran and all tasks succeeded / validation passed).
+- `1`: Workflow failure (one or more tasks failed under a stopping failure strategy).
+- `2`: Configuration or syntax error (invalid config file or malformed workflow file).
+- `3`: DAG validation error (circular dependency or missing dependency).
+- `130`: Interrupted via OS signal (SIGINT / SIGTERM).
 
 ---
 
-## Documentation
+## Technical Documentation & Architecture
 
-- [Configuration Guide](docs/CONFIGURATION.md) - Full specification of `forge.toml` and environment options.
-- [Declarative Workflow Specification](docs/DECLARATIVE_SPEC.md) - Syntax, task parameters, and schemas for JSON/TOML/YAML.
-- [Plugin Authoring Guide](docs/PLUGINS.md) - How to build, test, and distribute custom Forge task plugins.
-- [Examples Guide](examples/README.md) - Overview of all runnable Python and declarative sample workflows.
+For in-depth specs and guides:
+- [Configuration Guide](docs/CONFIGURATION.md)
+- [Declarative Specification](docs/DECLARATIVE_SPEC.md)
+- [Plugin Authoring Guide](docs/PLUGINS.md)
+- [Productization & Reliability Audit](docs/PRODUCTIZATION_AUDIT.md)
 
 ---
 

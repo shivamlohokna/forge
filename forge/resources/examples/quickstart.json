@@ -1,0 +1,38 @@
+{
+  "name": "QuickstartPipeline",
+  "description": "Canonical Forge beginner workflow: prepare, process, and save report",
+  "tasks": [
+    {
+      "id": "prepare_data",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "data/input.json",
+        "content": "{\"project\": \"Forge\", \"environment\": \"starter\", \"status\": \"ready\"}"
+      }
+    },
+    {
+      "id": "verify_data",
+      "type": "file",
+      "depends_on": [
+        "prepare_data"
+      ],
+      "params": {
+        "operation": "read",
+        "path": "data/input.json"
+      }
+    },
+    {
+      "id": "save_report",
+      "type": "file",
+      "depends_on": [
+        "verify_data"
+      ],
+      "params": {
+        "operation": "write",
+        "path": "data/report.json",
+        "content": "{\"status\": \"SUCCESS\", \"message\": \"Quickstart workflow completed successfully.\"}"
+      }
+    }
+  ]
+}

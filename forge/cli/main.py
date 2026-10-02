@@ -8,10 +8,14 @@ from pathlib import Path
 
 from forge import __version__
 from forge.cli.commands import (
+    doctor_command,
+    examples_command,
     history_command,
+    init_command,
     inspect_command,
     run_command,
     status_command,
+    tasks_command,
     validate_command,
 )
 from forge.config import ConfigError, ForgeConfig, resolve_config
@@ -63,6 +67,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # ── init ─────────────────────────────────────────────────────────────────
+    init_parser = subparsers.add_parser(
+        "init",
+        parents=[log_parent],
+        help="Initialize a new Forge project",
+        description="Initialize a new Forge project layout with forge.toml and sample workflow.json.",
+    )
+    init_parser.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Target project directory (default: current directory)",
+    )
 
     # ── run ──────────────────────────────────────────────────────────────────
     run_parser = subparsers.add_parser(
@@ -195,12 +213,76 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output results as JSON",
     )
 
+    # ── doctor ────────────────────────────────────────────────────────────────
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        parents=[log_parent],
+        help="Check system health and setup",
+        description="Run health diagnostics on Python environment, configuration, permissions, and plugins.",
+    )
+    doctor_parser.add_argument(
+        "--db",
+        dest="db",
+        default=None,
+        help="Path to SQLite database to check",
+    )
+    doctor_parser.add_argument(
+        "--json",
+        dest="json",
+        action="store_true",
+        help="Output diagnostics as JSON",
+    )
+
+    # ── tasks ─────────────────────────────────────────────────────────────────
+    tasks_parser = subparsers.add_parser(
+        "tasks",
+        parents=[log_parent],
+        help="List available task types",
+        description="List built-in and plugin-provided task types available for declarative workflows.",
+    )
+    tasks_parser.add_argument(
+        "--json",
+        dest="json",
+        action="store_true",
+        help="Output task list as JSON",
+    )
+
+    # ── examples ──────────────────────────────────────────────────────────────
+    examples_parser = subparsers.add_parser(
+        "examples",
+        parents=[log_parent],
+        help="List or copy workflow examples",
+        description="List runnable workflow examples or copy an example into your project.",
+    )
+    examples_parser.add_argument(
+        "--copy",
+        dest="copy",
+        default=None,
+        help="Name of example to copy into project (e.g. quickstart)",
+    )
+    examples_parser.add_argument(
+        "--target",
+        dest="target",
+        default=None,
+        help="Destination path for copied example",
+    )
+    examples_parser.add_argument(
+        "--json",
+        dest="json",
+        action="store_true",
+        help="Output examples catalog as JSON",
+    )
+
     return parser
 
 
 def _history_db(settings: ForgeConfig) -> str:
-    """Database path for read-only commands (history / inspect / status)."""
-    return settings.database if settings.database is not None else "forge.db"
+    """Database path for read-only commands (history / inspect / status / doctor)."""
+    if settings.database is not None:
+        return settings.database
+    if Path(".forge/execution.db").is_file():
+        return ".forge/execution.db"
+    return "forge.db"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -225,13 +307,18 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(settings)
 
     try:
-        if args.command == "run":
+        if args.command == "init":
+            return init_command(target_dir=args.directory)
+
+        elif args.command == "run":
+            db_path = settings.database if settings.database is not None else ".forge/execution.db"
             return run_command(
                 workflow_file=args.file,
-                db_path=settings.database,
+                db_path=db_path,
                 workers=settings.workers,
                 quiet=args.quiet,
             )
+
 
         elif args.command == "validate":
             return validate_command(workflow_file=args.file)
@@ -258,6 +345,22 @@ def main(argv: list[str] | None = None) -> int:
                 output_format="json" if args.json else "table",
             )
 
+        elif args.command == "doctor":
+            return doctor_command(
+                db_path=args.db or _history_db(settings),
+                output_format="json" if args.json else "table",
+            )
+
+        elif args.command == "tasks":
+            return tasks_command(output_format="json" if args.json else "table")
+
+        elif args.command == "examples":
+            return examples_command(
+                copy_name=args.copy,
+                target_path=args.target,
+                output_format="json" if args.json else "table",
+            )
+
         else:
             parser.print_help()
             return 0
@@ -277,4 +380,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

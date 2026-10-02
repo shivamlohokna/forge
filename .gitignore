@@ -38,6 +38,8 @@ ENV/
 Thumbs.db
 
 # Workspace / Demo output scratch
+scratch/
 workspace_*/
 demo_*/
 tmp_*/
+

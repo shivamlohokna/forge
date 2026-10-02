@@ -1,0 +1,37 @@
+{
+  "name": "FileProcessingPipeline",
+  "description": "Multi-stage file processing and copy workflow",
+  "tasks": [
+    {
+      "id": "write_raw_data",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "data/raw.txt",
+        "content": "line1\nline2\nline3\n"
+      }
+    },
+    {
+      "id": "backup_raw_data",
+      "type": "file",
+      "depends_on": [
+        "write_raw_data"
+      ],
+      "params": {
+        "operation": "copy",
+        "source": "data/raw.txt",
+        "destination": "data/raw.bak"
+      }
+    },
+    {
+      "id": "transform_data",
+      "type": "shell",
+      "depends_on": [
+        "backup_raw_data"
+      ],
+      "params": {
+        "command": "python -c \"data = open('data/raw.txt').read().upper(); open('data/processed.txt', 'w').write(data)\""
+      }
+    }
+  ]
+}

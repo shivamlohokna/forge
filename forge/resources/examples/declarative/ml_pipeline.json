@@ -1,0 +1,37 @@
+{
+  "name": "MachineLearningPipeline",
+  "description": "Simple ML data preparation, validation, and artifact generation workflow",
+  "tasks": [
+    {
+      "id": "generate_dataset",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "ml/features.csv",
+        "content": "feature1,feature2,target\n1.0,2.0,0\n3.0,4.0,1\n5.0,6.0,1\n"
+      }
+    },
+    {
+      "id": "validate_dataset",
+      "type": "shell",
+      "depends_on": [
+        "generate_dataset"
+      ],
+      "params": {
+        "command": "python -c \"lines = open('ml/features.csv').readlines(); assert len(lines) == 4, 'Invalid dataset length'\""
+      }
+    },
+    {
+      "id": "train_model_stub",
+      "type": "file",
+      "depends_on": [
+        "validate_dataset"
+      ],
+      "params": {
+        "operation": "write",
+        "path": "ml/model_metrics.json",
+        "content": "{\"accuracy\": 0.95, \"loss\": 0.12, \"status\": \"trained\"}"
+      }
+    }
+  ]
+}

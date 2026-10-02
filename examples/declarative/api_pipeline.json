@@ -1,0 +1,37 @@
+{
+  "name": "APIFetchPipeline",
+  "description": "HTTP REST client workflow with status validation and storage",
+  "tasks": [
+    {
+      "id": "fetch_http_data",
+      "type": "http",
+      "params": {
+        "url": "https://httpbin.org/get",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Forge/0.2.0"
+        },
+        "expected_status": [
+          200
+        ]
+      },
+      "retry_policy": {
+        "max_attempts": 2,
+        "delay_seconds": 1.0,
+        "backoff": "linear"
+      }
+    },
+    {
+      "id": "save_api_response",
+      "type": "file",
+      "depends_on": [
+        "fetch_http_data"
+      ],
+      "params": {
+        "operation": "write",
+        "path": "data/api_response.json",
+        "from_upstream": "fetch_http_data"
+      }
+    }
+  ]
+}
