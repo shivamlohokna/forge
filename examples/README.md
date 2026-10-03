@@ -15,6 +15,8 @@ This directory contains executable, production-grade reference workflow recipes 
 | `api_pipeline` | API Integration | JSON | **Standalone / External** | REST API HTTP request client with status check and storage |
 | `ml_pipeline` | Machine Learning | JSON | **Standalone** | ML dataset preparation, feature generation, and metric validation |
 | `github_plugin` | Plugin Extensions | JSON | **Optional Dep / Credentials** | GitHub Issue creation via the `forge-github` extension plugin |
+| `parameterized_backup` | Reusable Workflows | JSON | **Parameterized** | Reusable file backup pipeline driven by runtime parameters (`--param`) |
+| `parameterized_file_processor` | Reusable Workflows | TOML | **Parameterized** | Multi-stage file processor parameterized via CLI flags or parameter files |
 
 ---
 
@@ -189,3 +191,43 @@ Trigger GitHub issue creation automatically as part of a release or incident wor
 ```bash
 forge run examples/declarative/github_plugin_workflow.json
 ```
+
+---
+
+## 8. `parameterized_backup` (Reusable Workflows — JSON)
+
+### PROBLEM
+Run file backups across different source and destination paths without editing the workflow file.
+
+### WHAT FORGE DOES
+1. Validates required parameters (`source_file`, `backup_file`) and default parameters (`label`, `max_retries`).
+2. `copy_file` (`file`): Copies `{{ source_file }}` to `{{ backup_file }}` with retry configuration.
+3. `verify_backup` (`file`, depends on `copy_file`): Reads `{{ backup_file }}` to verify copy integrity.
+
+### RUN IT
+```bash
+forge run examples/declarative/parameterized_backup.json \
+  --param source_file=data/input.json \
+  --param backup_file=backups/input_backup.json \
+  --param label="production-backup"
+```
+
+---
+
+## 9. `parameterized_file_processor` (Reusable Workflows — TOML)
+
+### PROBLEM
+Drive a multi-step file read/write transformation pipeline using runtime parameters defined in TOML syntax.
+
+### WHAT FORGE DOES
+1. `read_input` (`file`): Reads the input file specified by `{{ input_path }}`.
+2. `write_output` (`file`, depends on `read_input`): Writes processed record to `{{ output_path }}` containing `{{ label }}`.
+
+### RUN IT
+```bash
+forge run examples/declarative/parameterized_file_processor.toml \
+  --param input_path=data/input.json \
+  --param output_path=data/output.txt \
+  --param label="nightly"
+```
+

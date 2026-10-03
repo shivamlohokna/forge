@@ -19,6 +19,7 @@ from forge.cli.commands import (
     tasks_command,
     validate_command,
 )
+from forge.cli.loader import parse_cli_parameter_args
 from forge.config import ConfigError, ForgeConfig, resolve_config
 from forge.exceptions import (
     CircularDependencyError,
@@ -115,6 +116,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Suppress output logging and execution summary",
     )
+    run_parser.add_argument(
+        "-p",
+        "--param",
+        dest="params",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Runtime parameter (repeatable): --param source=C:\\Data --param keep_days=7",
+    )
+    run_parser.add_argument(
+        "--params",
+        dest="params_file",
+        default=None,
+        metavar="FILE",
+        help="Path to a JSON/TOML/YAML parameter file supplying multiple values at once",
+    )
 
     # ── validate ─────────────────────────────────────────────────────────────
     validate_parser = subparsers.add_parser(
@@ -126,6 +143,22 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument(
         "file",
         help="Path to the workflow file (.py, .json, .toml, .yaml)",
+    )
+    validate_parser.add_argument(
+        "-p",
+        "--param",
+        dest="params",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Runtime parameter: --param key=value",
+    )
+    validate_parser.add_argument(
+        "--params",
+        dest="params_file",
+        default=None,
+        metavar="FILE",
+        help="Path to a JSON/TOML/YAML parameter file",
     )
 
     # ── plan ─────────────────────────────────────────────────────────────────
@@ -144,6 +177,22 @@ def build_parser() -> argparse.ArgumentParser:
         dest="json",
         action="store_true",
         help="Output execution plan as JSON",
+    )
+    plan_parser.add_argument(
+        "-p",
+        "--param",
+        dest="params",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Runtime parameter: --param key=value",
+    )
+    plan_parser.add_argument(
+        "--params",
+        dest="params_file",
+        default=None,
+        metavar="FILE",
+        help="Path to a JSON/TOML/YAML parameter file",
     )
 
     # ── history ──────────────────────────────────────────────────────────────
@@ -337,21 +386,47 @@ def main(argv: list[str] | None = None) -> int:
             return init_command(target_dir=args.directory)
 
         elif args.command == "run":
+            try:
+                run_params = parse_cli_parameter_args(
+                    param_list=getattr(args, "params", None),
+                    params_file=getattr(args, "params_file", None),
+                ) or None
+            except LoadError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 2
             db_path = settings.database if settings.database is not None else ".forge/execution.db"
             return run_command(
                 workflow_file=args.file,
                 db_path=db_path,
                 workers=settings.workers,
                 quiet=args.quiet,
+                parameters=run_params,
             )
 
         elif args.command == "validate":
-            return validate_command(workflow_file=args.file)
+            try:
+                val_params = parse_cli_parameter_args(
+                    param_list=getattr(args, "params", None),
+                    params_file=getattr(args, "params_file", None),
+                ) or None
+            except LoadError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 2
+            return validate_command(workflow_file=args.file, parameters=val_params)
 
         elif args.command == "plan":
+            try:
+                plan_params = parse_cli_parameter_args(
+                    param_list=getattr(args, "params", None),
+                    params_file=getattr(args, "params_file", None),
+                ) or None
+            except LoadError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 2
             return plan_command(
                 workflow_file=args.file,
                 output_format="json" if args.json else "table",
+                parameters=plan_params,
             )
 
         elif args.command == "history":

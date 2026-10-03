@@ -26,6 +26,11 @@ from forge.declarative.parsers import (
     parse_json,
     parse_workflow_file,
 )
+from forge.declarative.parameters import (
+    parse_parameter_specs,
+    resolve_and_validate_parameters,
+    substitute_parameters,
+)
 from forge.declarative.spec import WorkflowSpec
 from forge.declarative.validator import validate_workflow_dict
 from forge.exceptions import WorkflowSpecError
@@ -88,6 +93,7 @@ def _resolve_path_params(
 def load_declarative_workflow(
     data: dict[str, Any] | str | Path,
     registry: TaskRegistry | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> Workflow:
     """Load a declarative workflow definition into a fully validated Workflow instance.
 
@@ -100,13 +106,14 @@ def load_declarative_workflow(
         data: Workflow definition dictionary, JSON string, or file path.
         registry: Target TaskRegistry instance for resolving task types.
             Defaults to the process-wide default registry (includes built-in task types).
+        parameters: Optional runtime parameter dictionary overriding/supplying parameter values.
 
     Returns:
         Fully constructed and validated Workflow DAG instance.
 
     Raises:
-        WorkflowSpecError: If file parsing, env var interpolation, or workflow
-            specification validation fails.
+        WorkflowSpecError: If file parsing, env var interpolation, parameter validation,
+            or workflow specification validation fails.
         TypeError: If data is not a dict, str, or Path.
     """
     target_registry = registry if registry is not None else get_default_registry()
@@ -151,8 +158,16 @@ def load_declarative_workflow(
     # 1. Validate raw dictionary structure, parameters, and registry task types
     validate_workflow_dict(raw_dict, target_registry)
 
-    # 2. Convert to WorkflowSpec structure
-    spec = WorkflowSpec.from_dict(raw_dict)
+    # 2. Parse declared parameter specs, resolve/validate runtime inputs, and substitute
+    raw_parameters = raw_dict.get("parameters", {})
+    param_specs = parse_parameter_specs(raw_parameters)
+    effective_parameters = resolve_and_validate_parameters(param_specs, parameters)
+
+    substituted_dict = substitute_parameters(raw_dict, effective_parameters)
+
+    # 3. Convert to WorkflowSpec structure
+    spec = WorkflowSpec.from_dict(substituted_dict)
+
 
     # 3. Instantiate tasks via TaskRegistry (NO hardcoded if/elif task type branching!)
     id_to_task = {}
@@ -200,7 +215,7 @@ def load_declarative_workflow(
         name=spec.name,
         workflow_id=spec.workflow_id,
         description=spec.description,
-        parameters=spec.parameters,
+        parameters=effective_parameters,
         metadata=spec.metadata,
     )
     workflow.add_tasks(*id_to_task.values())

@@ -34,7 +34,7 @@ def run_command(
     """Execute a workflow and print the execution summary.
 
     Args:
-        workflow_file: Path to the Python workflow definition file.
+        workflow_file: Path to the Python or declarative workflow definition file.
         db_path: Optional SQLite database file path for persistence.
         workers: Optional max workers for concurrent task execution.
         quiet: If True, suppress engine output and summary.
@@ -44,7 +44,7 @@ def run_command(
         int: 0 on success, 1 on workflow execution failure, 2 on load/config error, 3 on validation error.
     """
     try:
-        workflow = load_workflow(workflow_file)
+        workflow = load_workflow(workflow_file, parameters=parameters)
     except (CircularDependencyError, MissingDependencyError) as e:
         print(f"Validation error in workflow: {e}", file=sys.stderr)
         return 3
@@ -143,17 +143,21 @@ def run_command(
 # validate
 # --------------------------------------------------------------------------- #
 
-def validate_command(workflow_file: str | Path) -> int:
-    """Validate a workflow definition for cyclic or missing dependencies.
+def validate_command(
+    workflow_file: str | Path,
+    parameters: dict[str, Any] | None = None,
+) -> int:
+    """Validate a workflow definition for cyclic or missing dependencies and parameters.
 
     Args:
-        workflow_file: Path to the Python workflow definition file.
+        workflow_file: Path to the Python or declarative workflow definition file.
+        parameters: Optional dictionary of runtime parameters.
 
     Returns:
         int: 0 if workflow is valid, 3 on validation error, 2 on load/syntax error.
     """
     try:
-        workflow = load_workflow(workflow_file)
+        workflow = load_workflow(workflow_file, parameters=parameters)
     except (CircularDependencyError, MissingDependencyError) as e:
         print(f"Validation error in workflow: {e}", file=sys.stderr)
         return 3
@@ -169,7 +173,8 @@ def validate_command(workflow_file: str | Path) -> int:
 
     try:
         workflow.validate()
-        print(f"Workflow '{workflow.name}' is valid ({len(workflow.tasks)} tasks).")
+        param_msg = f" with parameters ({len(workflow.parameters)})" if workflow.parameters else ""
+        print(f"Workflow '{workflow.name}' is valid ({len(workflow.tasks)} tasks{param_msg}).")
         return 0
     except (CircularDependencyError, MissingDependencyError, ForgeError) as e:
         print(f"Validation error in workflow '{workflow.name}': {e}", file=sys.stderr)
@@ -775,21 +780,26 @@ def _get_task_type_and_params(task: Any) -> tuple[str, dict[str, Any]]:
     return t_type, params_summary
 
 
+from forge.declarative.parameters import mask_secret_parameters
+
+
 def plan_command(
     workflow_file: str | Path,
     output_format: str = "table",
+    parameters: dict[str, Any] | None = None,
 ) -> int:
     """Preview execution plan for a workflow without executing tasks.
 
     Args:
         workflow_file: Path to workflow definition file (.py, .json, .toml, .yaml).
         output_format: "table" or "json".
+        parameters: Optional dictionary of runtime parameters.
 
     Returns:
         int: 0 on success, 2 on load/config error, 3 on validation error.
     """
     try:
-        workflow = load_workflow(workflow_file)
+        workflow = load_workflow(workflow_file, parameters=parameters)
     except (CircularDependencyError, MissingDependencyError) as e:
         print(f"Validation error in workflow: {e}", file=sys.stderr)
         return 3
@@ -814,6 +824,7 @@ def plan_command(
 
     total_tasks = len(workflow.tasks)
     total_batches = len(batches)
+    masked_params = mask_secret_parameters(workflow.parameters)
 
     formatted_batches = []
     task_counter = 1
@@ -842,6 +853,7 @@ def plan_command(
             "workflow_id": workflow.workflow_id,
             "workflow_name": workflow.name,
             "description": workflow.description or "",
+            "parameters": masked_params,
             "total_tasks": total_tasks,
             "total_batches": total_batches,
             "valid": True,
@@ -854,7 +866,14 @@ def plan_command(
     print("=" * (15 + len(workflow.name)))
     if workflow.description:
         print(f"Description: {workflow.description}")
+
+    if masked_params:
+        print("\nParameters:")
+        for k, v in masked_params.items():
+            print(f"  {k:<16} = {v!r}")
+
     print(f"\nExecution Plan ({total_tasks} tasks across {total_batches} batch{'es' if total_batches != 1 else ''}):\n")
+
 
     for b in formatted_batches:
         print(f"  Batch {b['batch_number']}:")

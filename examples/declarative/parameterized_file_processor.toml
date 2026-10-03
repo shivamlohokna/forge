@@ -1,0 +1,40 @@
+name = "Parameterized File Processor"
+description = "Reusable file processing pipeline — supply input/output paths and label at runtime."
+
+[parameters.input_path]
+type        = "string"
+required    = true
+description = "Path to the file to process"
+
+[parameters.output_path]
+type        = "string"
+required    = true
+description = "Path where the processed result will be written"
+
+[parameters.label]
+type        = "string"
+default     = "processed"
+description = "Label included in the written record"
+
+[parameters.verbose]
+type        = "boolean"
+default     = false
+description = "Enable verbose shell output"
+
+[[tasks]]
+id          = "read_input"
+type        = "file"
+description = "Read the input file at {{ input_path }}"
+[tasks.params]
+operation   = "read"
+path        = "{{ input_path }}"
+
+[[tasks]]
+id          = "write_output"
+type        = "file"
+description = "Write {{ label }} result to {{ output_path }}"
+depends_on  = ["read_input"]
+[tasks.params]
+operation   = "write"
+path        = "{{ output_path }}"
+content     = "processed by forge: {{ label }}"

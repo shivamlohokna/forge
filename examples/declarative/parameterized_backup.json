@@ -1,0 +1,50 @@
+{
+  "name": "Parameterized Backup",
+  "description": "Reusable backup workflow — run against any source/destination pair using --param.",
+  "parameters": {
+    "source_file": {
+      "type": "string",
+      "required": true,
+      "description": "Path to the file to back up (e.g. data/report.json)"
+    },
+    "backup_file": {
+      "type": "string",
+      "required": true,
+      "description": "Destination path for the backup copy (e.g. backups/report_backup.json)"
+    },
+    "label": {
+      "type": "string",
+      "default": "backup",
+      "description": "Human-readable label recorded in the summary"
+    },
+    "max_retries": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of retry attempts if the copy step fails"
+    }
+  },
+  "tasks": [
+    {
+      "id": "copy_file",
+      "type": "file",
+      "description": "Copy {{ source_file }} to {{ backup_file }}",
+      "params": {
+        "operation": "copy",
+        "source": "{{ source_file }}",
+        "destination": "{{ backup_file }}"
+      },
+      "max_retries": "{{ max_retries }}",
+      "failure_strategy": "RETRY"
+    },
+    {
+      "id": "verify_backup",
+      "type": "file",
+      "description": "Verify the {{ label }} copy is readable",
+      "depends_on": ["copy_file"],
+      "params": {
+        "operation": "read",
+        "path": "{{ backup_file }}"
+      }
+    }
+  ]
+}

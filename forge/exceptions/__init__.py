@@ -46,6 +46,12 @@ class WorkflowSpecError(LoadError):
     pass
 
 
+class ParameterError(WorkflowSpecError):
+    """Raised when workflow parameter declaration, validation, or substitution fails."""
+    pass
+
+
+
 
 class RegistryError(ForgeError):
     """Raised for task-registry registration or lookup failures."""
