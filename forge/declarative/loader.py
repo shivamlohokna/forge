@@ -155,8 +155,10 @@ def load_declarative_workflow(
             f"Environment variable interpolation failed: {exc}"
         ) from exc
 
-    # 1. Validate raw dictionary structure, parameters, and registry task types
+    # 1. Validate raw dictionary structure, parameters, output references, and registry task types
     validate_workflow_dict(raw_dict, target_registry)
+    from forge.core.output import validate_output_references
+    validate_output_references(raw_dict)
 
     # 2. Parse declared parameter specs, resolve/validate runtime inputs, and substitute
     raw_parameters = raw_dict.get("parameters", {})
@@ -168,17 +170,13 @@ def load_declarative_workflow(
     # 3. Convert to WorkflowSpec structure
     spec = WorkflowSpec.from_dict(substituted_dict)
 
-
-    # 3. Instantiate tasks via TaskRegistry (NO hardcoded if/elif task type branching!)
+    # 4. Instantiate tasks via TaskRegistry
     id_to_task = {}
     for task_spec in spec.tasks:
         task_name = task_spec.name or task_spec.id
 
         params = task_spec.params
 
-        # ── Phase 8.3.4: Schema-aware relative path resolution ────────────────
-        # Only ``file`` and ``shell`` path fields are resolved; arbitrary
-        # strings are never treated as filesystem paths.
         if base_dir is not None:
             params = _resolve_path_params(task_spec.type, params, base_dir)
 
@@ -196,12 +194,14 @@ def load_declarative_workflow(
 
         try:
             task = target_registry.create(task_spec.type, **kwargs)
+            task.raw_params = dict(params)
         except Exception as exc:
             raise WorkflowSpecError(
                 f"Failed to construct task '{task_spec.id}' of type '{task_spec.type}': {exc}"
             ) from exc
 
         id_to_task[task_spec.id] = task
+
 
     # 4. Wire DAG dependencies
     for task_spec in spec.tasks:

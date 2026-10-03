@@ -48,9 +48,19 @@ def _from_iso(value: str | None) -> datetime | None:
 def _to_json(obj: Any) -> str:
     """Serialise an arbitrary Python object to a JSON string.
 
+    Task result objects (e.g. ShellResult, FileResult) expose a ``to_dict()``
+    method — that is tried first so they are persisted as structured JSON
+    dicts rather than Python object repr strings.
+
     Falls back to ``str(obj)`` if the object is not directly
     JSON-serialisable (e.g. bytes, custom classes).
     """
+    # Normalize result objects to dicts before JSON serialization.
+    if hasattr(obj, "to_dict") and callable(getattr(obj, "to_dict")):
+        try:
+            obj = obj.to_dict()
+        except Exception:
+            pass
     try:
         return json.dumps(obj, default=str)
     except (TypeError, ValueError):

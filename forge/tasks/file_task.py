@@ -33,6 +33,80 @@ class FileOperation(str, Enum):
     EXISTS = "EXISTS"
 
 
+from dataclasses import dataclass
+
+@dataclass
+class FileResult:
+    """Structured result produced by a FileTask execution."""
+
+    operation: str
+    path: str | None = None
+    content: str | bytes | None = None
+    exists: bool | None = None
+    size: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert FileResult to a serializable dictionary for task outputs."""
+        res: dict[str, Any] = {"operation": self.operation}
+        if self.path is not None:
+            res["path"] = self.path
+        if self.content is not None:
+            if isinstance(self.content, str):
+                res["content"] = self.content
+                res["body"] = self.content
+            elif isinstance(self.content, bytes):
+                try:
+                    res["content"] = self.content.decode("utf-8")
+                except UnicodeDecodeError:
+                    res["content"] = f"<binary bytes: {len(self.content)}>"
+            else:
+                res["content"] = str(self.content)
+        if self.exists is not None:
+            res["exists"] = self.exists
+        if self.size is not None:
+            res["size"] = self.size
+        return res
+
+    def __str__(self) -> str:
+        # For write-like operations the produced artifact is the path.
+        # For read operations the produced value is the content.
+        write_ops = {"WRITE", "APPEND", "COPY", "MOVE"}
+        if self.operation.upper() in write_ops:
+            if self.path is not None:
+                return self.path
+        if self.content is not None:
+            return str(self.content)
+        if self.path is not None:
+            return self.path
+        if self.exists is not None:
+            return str(self.exists)
+        return ""
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, FileResult):
+            return self.to_dict() == other.to_dict()
+        if isinstance(other, str):
+            return str(self) == other
+        if isinstance(other, bool):
+            return self.exists == other if self.exists is not None else False
+        if isinstance(other, (bytes, bytearray)):
+            if isinstance(self.content, (bytes, bytearray)):
+                return self.content == other
+            return False
+        return False
+
+    def __bool__(self) -> bool:
+        # EXISTS results: use the actual exists value.
+        if self.operation.upper() == "EXISTS" and self.exists is not None:
+            return self.exists
+        # DELETE results with exists=False indicate the file is gone — falsy.
+        if self.operation.upper() == "DELETE" and self.exists is False:
+            return False
+        # All other operations (READ, WRITE, APPEND, COPY, MOVE) are truthy
+        # when they have a path or content.
+        return self.path is not None or self.content is not None
+
+
 class FileTask(Task):
     """A managed task that performs filesystem operations.
 
@@ -146,7 +220,12 @@ class FileTask(Task):
 
     def execute(self, context: ExecutionContext) -> Any:
         """Execute the configured filesystem operation."""
-        op = self.operation
+        op_str = self.operation.value if isinstance(self.operation, FileOperation) else str(self.operation).upper()
+        try:
+            op = FileOperation(op_str)
+        except ValueError:
+            valid = [o.value for o in FileOperation]
+            raise ValueError(f"Invalid file operation '{self.operation}'. Must be one of: {valid}")
 
         if op == FileOperation.READ:
             return self._execute_read()
@@ -171,7 +250,8 @@ class FileTask(Task):
 
         raise NotImplementedError(f"Unsupported file operation: {op}")
 
-    def _execute_read(self) -> str | bytes:
+
+    def _execute_read(self) -> FileResult:
         assert self.source is not None
         if not self.source.exists():
             raise FileNotFoundError(f"File not found: {self.source}")
@@ -179,10 +259,14 @@ class FileTask(Task):
             raise IsADirectoryError(f"Expected file but found directory: {self.source}")
 
         if self.binary:
-            return self.source.read_bytes()
-        return self.source.read_text(encoding=self.encoding)
+            content = self.source.read_bytes()
+        else:
+            content = self.source.read_text(encoding=self.encoding)
+        
+        size = self.source.stat().st_size if self.source.exists() else None
+        return FileResult(operation="READ", path=str(self.source.resolve()), content=content, size=size)
 
-    def _execute_write(self, context: ExecutionContext) -> str:
+    def _execute_write(self, context: ExecutionContext) -> FileResult:
         assert self.destination is not None
         payload = self._resolve_payload(context)
 
@@ -210,9 +294,11 @@ class FileTask(Task):
                 except OSError:
                     pass
 
-        return str(self.destination.resolve())
+        resolved_path = str(self.destination.resolve())
+        size = self.destination.stat().st_size if self.destination.exists() else None
+        return FileResult(operation="WRITE", path=resolved_path, content=payload, size=size)
 
-    def _execute_append(self, context: ExecutionContext) -> str:
+    def _execute_append(self, context: ExecutionContext) -> FileResult:
         assert self.destination is not None
         payload = self._resolve_payload(context)
 
@@ -226,9 +312,12 @@ class FileTask(Task):
             else:
                 f.write(payload)
 
-        return str(self.destination.resolve())
+        resolved_path = str(self.destination.resolve())
+        size = self.destination.stat().st_size if self.destination.exists() else None
+        return FileResult(operation="APPEND", path=resolved_path, content=payload, size=size)
 
-    def _execute_copy(self) -> str:
+
+    def _execute_copy(self) -> FileResult:
         assert self.source is not None and self.destination is not None
         if not self.source.exists():
             raise FileNotFoundError(f"Source does not exist: {self.source}")
@@ -247,9 +336,11 @@ class FileTask(Task):
         else:
             shutil.copy2(self.source, self.destination)
 
-        return str(self.destination.resolve())
+        resolved_path = str(self.destination.resolve())
+        size = self.destination.stat().st_size if self.destination.exists() else None
+        return FileResult(operation="COPY", path=resolved_path, size=size)
 
-    def _execute_move(self) -> str:
+    def _execute_move(self) -> FileResult:
         assert self.source is not None and self.destination is not None
         if not self.source.exists():
             raise FileNotFoundError(f"Source does not exist: {self.source}")
@@ -264,13 +355,16 @@ class FileTask(Task):
             dest_dir.mkdir(parents=True, exist_ok=True)
 
         shutil.move(str(self.source), str(self.destination))
-        return str(self.destination.resolve())
+        resolved_path = str(self.destination.resolve())
+        size = self.destination.stat().st_size if self.destination.exists() else None
+        return FileResult(operation="MOVE", path=resolved_path, size=size)
 
-    def _execute_delete(self) -> bool:
+    def _execute_delete(self) -> FileResult:
         assert self.source is not None
+        src_path = str(self.source.resolve())
         if not self.source.exists():
             if self.missing_ok:
-                return False
+                return FileResult(operation="DELETE", path=src_path, exists=False)
             raise FileNotFoundError(f"File or directory not found to delete: {self.source}")
 
         if self.source.is_dir():
@@ -278,11 +372,15 @@ class FileTask(Task):
         else:
             self.source.unlink()
 
-        return True
+        return FileResult(operation="DELETE", path=src_path, exists=False)
 
-    def _execute_exists(self) -> bool:
+    def _execute_exists(self) -> FileResult:
         assert self.source is not None
-        return self.source.exists()
+        exists_val = self.source.exists()
+        src_path = str(self.source.resolve())
+        size = self.source.stat().st_size if exists_val else None
+        return FileResult(operation="EXISTS", path=src_path, exists=exists_val, size=size)
+
 
     def _resolve_payload(self, context: ExecutionContext) -> str | bytes:
         """Resolve write/append content from explicit argument or upstream task output."""

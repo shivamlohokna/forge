@@ -332,12 +332,14 @@ def inspect_command(
                         "started_at": att.started_at,
                         "finished_at": att.finished_at,
                     })
+                out_val = store._from_json(tr.output) if hasattr(store, "_from_json") else (json.loads(tr.output) if tr.output else None)
                 tasks_data.append({
                     "task_name": tr.task_name,
                     "task_run_id": tr.task_run_id,
                     "status": tr.status,
                     "attempt_count": tr.attempt_count,
                     "duration_seconds": tr.duration_seconds,
+                    "output": out_val,
                     "error_message": tr.error_message,
                     "started_at": tr.started_at,
                     "finished_at": tr.finished_at,
@@ -390,6 +392,16 @@ def inspect_command(
             t_dur = f"{tr.duration_seconds:.2f}s" if tr.duration_seconds is not None else "N/A"
             t_attempts = f", attempts: {tr.attempt_count}" if tr.attempt_count > 0 else ""
             lines.append(f"  {status_tag:<11} {tr.task_name} (id: {tr.task_run_id}{t_attempts}, {t_dur})")
+            if tr.output:
+                try:
+                    parsed_out = json.loads(tr.output)
+                    if isinstance(parsed_out, dict):
+                        lines.append("    Outputs:")
+                        for k, v in parsed_out.items():
+                            lines.append(f"      {k:<12} = {v!r}")
+                except Exception:
+                    lines.append(f"    Output: {tr.output}")
+
             if tr.error_message:
                 lines.append(f"    Error: {tr.error_message}")
 
@@ -399,6 +411,7 @@ def inspect_command(
                     att_dur = f"{att.duration_seconds:.2f}s" if att.duration_seconds is not None else "N/A"
                     att_err = f" (Error: {att.error_message})" if att.error_message else ""
                     lines.append(f"      Attempt #{att.attempt_number}: [{att.status}] ({att_dur}){att_err}")
+
 
         lines.append("=======================================================\n")
         print("\n".join(lines))
@@ -831,14 +844,19 @@ def plan_command(
     for batch_idx, batch in enumerate(batches, start=1):
         batch_tasks = []
         for task in batch:
-            deps = sorted([d.task_id for d in task.dependencies])
             t_type, params_summary = _get_task_type_and_params(task)
+            deps = sorted([d.task_id for d in task.dependencies])
+            from forge.core.output import extract_expressions
+            raw_p = getattr(task, "raw_params", {}) or params_summary
+            exprs = extract_expressions(raw_p)
+            consumed_outputs = [e for e in exprs if e.startswith("outputs.")]
 
             task_info = {
                 "step": task_counter,
                 "task_id": task.task_id,
                 "task_type": t_type,
                 "depends_on": deps,
+                "consumes": consumed_outputs,
                 "params": params_summary,
             }
             batch_tasks.append(task_info)
@@ -882,10 +900,13 @@ def plan_command(
             print(f"    {t['step']}. {t['task_id']}")
             print(f"       type:       {t['task_type']}")
             print(f"       depends on: {deps_str}")
+            if t.get("consumes"):
+                print(f"       consumes:   {', '.join(t['consumes'])}")
             if t["params"]:
                 p_str = ", ".join(f"{k}={v!r}" for k, v in t["params"].items())
                 print(f"       parameters: {p_str}")
         print()
+
 
     print("Preflight Safety Summary:")
     print("  [OK] Execution DAG is valid (no cycles, no missing dependencies)")

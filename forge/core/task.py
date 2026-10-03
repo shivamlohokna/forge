@@ -78,6 +78,7 @@ class ExecutionContext:
     attempt: int = 1
     parameters: dict[str, Any] = field(default_factory=dict)
     upstream_results: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def get_param(self, key: str, default: Any = None) -> Any:
@@ -87,6 +88,20 @@ class ExecutionContext:
     def get_upstream_result(self, task_id_or_name: str, default: Any = None) -> Any:
         """Fetch the output produced by an upstream task."""
         return self.upstream_results.get(task_id_or_name, default)
+
+    def get_output(self, task_id_or_name: str, field_path: str = "", default: Any = None) -> Any:
+        """Fetch structured output produced by an upstream task."""
+        task_output = self.outputs.get(task_id_or_name)
+        if task_output is None:
+            return default
+        if not field_path:
+            return task_output
+        try:
+            from forge.core.output import traverse_path
+            return traverse_path(task_output, field_path)
+        except KeyError:
+            return default
+
 
 
 def _slugify(value: str) -> str:
@@ -145,11 +160,47 @@ class Task(ABC):
         # Execution constraints
         self.timeout: float | None = timeout
 
-        # Runtime state
+        # Runtime state & raw parameters for dynamic template resolution
         self.status: TaskStatus = TaskStatus.PENDING
         self.attempts: int = 0
         self.last_error: Exception | None = None
         self.result: Any = None
+        self.raw_params: dict[str, Any] = {}
+
+    def resolve_template_attributes(self, context: ExecutionContext) -> None:
+        """Dynamically resolve output and parameter templates in task attributes before execution."""
+        from pathlib import Path
+        from forge.core.output import substitute_template
+
+        # 1. Resolve from explicit raw_params dictionary
+        if self.raw_params:
+            for key, val in self.raw_params.items():
+                if hasattr(self, key):
+                    target_val = getattr(self, key)
+                    if isinstance(target_val, Path):
+                        str_v = str(val)
+                        if "{{" in str_v:
+                            resolved_str = substitute_template(str_v, context.parameters, context.outputs)
+                            setattr(self, key, Path(resolved_str))
+                    else:
+                        resolved = substitute_template(val, context.parameters, context.outputs)
+                        setattr(self, key, resolved)
+
+        # 2. Scan standard instance string/dict/list/Path attributes for unresolved templates
+        for attr_name in ("command", "url", "source", "destination", "content", "stdin", "cwd", "params", "headers", "data", "json_data", "env"):
+            if hasattr(self, attr_name):
+                val = getattr(self, attr_name)
+                if val is not None:
+                    if isinstance(val, Path):
+                        s_val = str(val)
+                        if "{{" in s_val:
+                            resolved_str = substitute_template(s_val, context.parameters, context.outputs)
+                            setattr(self, attr_name, Path(resolved_str))
+                    elif isinstance(val, (str, dict, list)):
+                        resolved = substitute_template(val, context.parameters, context.outputs)
+                        setattr(self, attr_name, resolved)
+
+
 
     @property
     def max_retries(self) -> int:

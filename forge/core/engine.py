@@ -253,6 +253,8 @@ class Engine:
 
         all_tasks = [t for batch in batches for t in batch]
         upstream_outputs: dict[str, Any] = {}
+        structured_outputs: dict[str, dict[str, Any]] = {}
+
 
         # 2. Iterate through topological batches (tasks within a batch are independent)
         for batch_idx, batch in enumerate(batches):
@@ -298,6 +300,7 @@ class Engine:
                 workflow=workflow,
                 parameters=combined_params,
                 upstream_outputs=upstream_outputs,
+                structured_outputs=structured_outputs,
                 run_id=workflow_result.run_id,
             )
 
@@ -307,14 +310,18 @@ class Engine:
                 workflow_result.add_task_result(task_res)
                 self._persist_task_result(workflow_result.run_id, task_res)
 
-
                 if task.status == TaskStatus.SUCCESS:
+                    from forge.core.output import get_structured_output
+                    struct_out = get_structured_output(task_res.output)
                     with self._lock:
                         upstream_outputs[task.task_id] = task_res.output
                         upstream_outputs[task.name] = task_res.output
+                        structured_outputs[task.task_id] = struct_out
+                        structured_outputs[task.name] = struct_out
                 elif task.status == TaskStatus.FAILED:
                     if task.failure_strategy in (FailureStrategy.STOP, FailureStrategy.RETRY):
                         halt_workflow = True
+
 
             if halt_workflow:
                 self._cascade_blocked_to_unexecuted(all_tasks, workflow_result)
@@ -341,6 +348,7 @@ class Engine:
         workflow: Workflow,
         parameters: dict[str, Any],
         upstream_outputs: dict[str, Any],
+        structured_outputs: dict[str, dict[str, Any]] | None = None,
         run_id: str | None = None,
     ) -> list[tuple[Task, TaskResult]]:
         """Execute a batch of ready independent tasks."""
@@ -366,6 +374,7 @@ class Engine:
                     workflow=workflow,
                     parameters=parameters,
                     upstream_outputs=upstream_outputs,
+                    structured_outputs=structured_outputs,
                     run_id=run_id,
                 )
                 results.append((task, res))
@@ -381,6 +390,7 @@ class Engine:
                     workflow,
                     parameters,
                     upstream_outputs,
+                    structured_outputs,
                     run_id,
                 ): task
                 for task in ready_tasks
@@ -416,6 +426,7 @@ class Engine:
         workflow: Workflow,
         parameters: dict[str, Any],
         upstream_outputs: dict[str, Any],
+        structured_outputs: dict[str, dict[str, Any]] | None = None,
         run_id: str | None = None,
     ) -> TaskResult:
         """Run a single task handling execution, timeouts, retries, and failure strategies."""
@@ -446,6 +457,7 @@ class Engine:
                     dep_output = upstream_outputs.get(dep.task_id)
                     task_upstream_results[dep.task_id] = dep_output
                     task_upstream_results[dep.name] = dep_output
+                current_outputs = dict(structured_outputs or {})
 
             context = ExecutionContext(
                 task_id=task.task_id,
@@ -455,7 +467,28 @@ class Engine:
                 attempt=attempt,
                 parameters=parameters,
                 upstream_results=task_upstream_results,
+                outputs=current_outputs,
             )
+
+            # Dynamically resolve any template references in task parameters using runtime outputs
+            try:
+                task.resolve_template_attributes(context)
+            except Exception as res_err:
+                error_tb = "".join(
+                    traceback.format_exception(type(res_err), res_err, res_err.__traceback__)
+                )
+                attempt_rec.finish(
+                    status=TaskStatus.FAILED,
+                    error_message=str(res_err),
+                    error_traceback=error_tb,
+                )
+                task_res.add_attempt(attempt_rec)
+                task.status = TaskStatus.FAILED
+                task_res.status = TaskStatus.FAILED
+                self._notify("on_task_failure", task, res_err)
+                self._emit_event(EventType.TASK_FAILED, workflow, task=task, data={"error": str(res_err)})
+                return task_res
+
 
             # Run task with optional timeout
             output, error = self._run_with_timeout(task, context)

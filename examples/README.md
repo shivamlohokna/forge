@@ -17,6 +17,8 @@ This directory contains executable, production-grade reference workflow recipes 
 | `github_plugin` | Plugin Extensions | JSON | **Optional Dep / Credentials** | GitHub Issue creation via the `forge-github` extension plugin |
 | `parameterized_backup` | Reusable Workflows | JSON | **Parameterized** | Reusable file backup pipeline driven by runtime parameters (`--param`) |
 | `parameterized_file_processor` | Reusable Workflows | TOML | **Parameterized** | Multi-stage file processor parameterized via CLI flags or parameter files |
+| `output_pipeline_demo` | Output Composition | JSON | **Outputs** | Task output composition pipeline passing data across HTTP and File tasks |
+| `parameterized_output_workflow` | Output Composition | TOML | **Outputs** | Combined parameter and task output template composition pipeline |
 
 ---
 

@@ -1,0 +1,29 @@
+name = "Parameterized Output Workflow"
+description = "Demonstrates combined runtime parameter and task output composition."
+
+[parameters.target_dir]
+type        = "string"
+default     = "storage"
+description = "Target output directory"
+
+[parameters.filename]
+type        = "string"
+default     = "record.txt"
+description = "Target record filename"
+
+[[tasks]]
+id          = "create_seed"
+type        = "file"
+[tasks.params]
+operation   = "write"
+path        = "{{ target_dir }}/seed.json"
+content     = '{"status": "seed_created"}'
+
+[[tasks]]
+id          = "process_seed"
+type        = "file"
+depends_on  = ["create_seed"]
+[tasks.params]
+operation   = "copy"
+source      = "{{ outputs.create_seed.path }}"
+destination = "{{ target_dir }}/{{ filename }}"

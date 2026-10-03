@@ -1,0 +1,37 @@
+{
+  "name": "Output Pipeline Demo",
+  "description": "Output-driven pipeline passing task outputs across HTTP and File tasks.",
+  "tasks": [
+    {
+      "id": "fetch_data",
+      "type": "http",
+      "params": {
+        "url": "https://httpbin.org/get",
+        "method": "GET"
+      }
+    },
+    {
+      "id": "write_backup",
+      "type": "file",
+      "depends_on": [
+        "fetch_data"
+      ],
+      "params": {
+        "operation": "write",
+        "path": "data/output_demo.txt",
+        "content": "{{ outputs.fetch_data.body }}"
+      }
+    },
+    {
+      "id": "verify_backup",
+      "type": "file",
+      "depends_on": [
+        "write_backup"
+      ],
+      "params": {
+        "operation": "read",
+        "path": "{{ outputs.write_backup.path }}"
+      }
+    }
+  ]
+}

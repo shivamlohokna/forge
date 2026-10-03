@@ -37,6 +37,7 @@ class TaskSpec:
     failure_strategy: str = "STOP"
     timeout: float | None = None
     description: str = ""
+    outputs: dict[str, Any] | list[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskSpec:
@@ -66,6 +67,7 @@ class TaskSpec:
         failure_strategy = data.get("failure_strategy", "STOP")
         timeout = data.get("timeout")
         description = data.get("description", "")
+        outputs = data.get("outputs")
 
         return cls(
             id=str(task_id) if task_id is not None else "",
@@ -78,7 +80,9 @@ class TaskSpec:
             failure_strategy=str(failure_strategy).upper() if failure_strategy else "STOP",
             timeout=float(timeout) if timeout is not None else None,
             description=str(description) if description else "",
+            outputs=outputs,
         )
+
 
 
 @dataclass

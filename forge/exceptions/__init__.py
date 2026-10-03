@@ -51,6 +51,12 @@ class ParameterError(WorkflowSpecError):
     pass
 
 
+class OutputError(WorkflowSpecError):
+    """Raised when workflow output resolution, reference, or validation fails."""
+    pass
+
+
+
 
 
 class RegistryError(ForgeError):
