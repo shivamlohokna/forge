@@ -3,6 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Typing](https://img.shields.io/badge/typing-PEP%20561-green.svg)](https://peps.python.org/pep-0561/)
+[![GitHub Release](https://img.shields.io/github/v/release/shivamlohokna/forge?logo=github)](https://github.com/shivamlohokna/forge/releases/latest)
 
 ---
 
@@ -333,7 +334,10 @@ forge-gui
 
 ### Standalone Windows Installer
 
-Forge Desktop is packaged into a standalone Windows installer (`ForgeDesktop-Setup.exe`) using PyInstaller and Inno Setup, enabling zero-install, double-click execution with no external Python runtime required.
+Forge Desktop is packaged into a standalone Windows installer using PyInstaller and Inno Setup, enabling zero-install, double-click execution with no external Python runtime required.
+
+- 📥 **Download:** [**ForgeDesktop-0.2.0-Setup.exe**](https://github.com/shivamlohokna/forge/releases/download/v0.2.0/ForgeDesktop-0.2.0-Setup.exe) (Windows 64-bit Installer)
+- 📋 **Release Details & Notes:** [Forge v0.2.0 Release](https://github.com/shivamlohokna/forge/releases/tag/v0.2.0)
 
 ---
 
