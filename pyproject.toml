@@ -24,8 +24,12 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+gui = ["PySide6>=6.5.0"]
+
 [project.scripts]
 forge = "forge.cli.main:main"
+forge-gui = "forge_gui:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -36,7 +40,8 @@ exclude = ["forge-github*", "tests*"]
 forge = [
     "py.typed",
     "resources/examples/*",
-    "resources/examples/declarative/*"
+    "resources/examples/declarative/*",
+    "resources/icons/*"
 ]
 
 [tool.pytest.ini_options]

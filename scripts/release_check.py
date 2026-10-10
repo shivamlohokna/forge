@@ -46,7 +46,9 @@ def main() -> int:
 
     # Step 2: Build wheel package
     dist_dir = REPO_ROOT / "dist"
-    shutil.rmtree(dist_dir, ignore_errors=True)
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    for whl in dist_dir.glob("*.whl"):
+        whl.unlink()
     run_step("2. Building Wheel package", [sys.executable, "-m", "pip", "wheel", "--no-deps", "-w", "dist", "."])
 
     wheels = list(dist_dir.glob("*.whl"))

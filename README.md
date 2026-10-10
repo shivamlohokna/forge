@@ -314,9 +314,33 @@ Once installed, plugin task types are automatically discovered and can be used d
 
 ---
 
+## Forge Desktop Application
+
+Forge provides a native Windows graphical application:
+- **Visual Workflow Editor**: Interactive task creation, dependency wiring, and instant validation.
+- **Starter Templates**: 1-click templates for System Health Audits, File Backup Pipelines, and REST API Monitors.
+- **Live DAG Execution Visualizer**: Real-time task progress tracking, live duration timer, and output inspection.
+- **Durable History Browser**: Explore past executions, filter by status, and inspect per-task metadata.
+- **Settings & Defaults**: Configure default concurrency and local storage paths.
+
+### Launching the GUI
+
+With Python and GUI dependencies installed:
+```bash
+pip install "forge[gui]"
+forge-gui
+```
+
+### Standalone Windows Installer
+
+Forge Desktop is packaged into a standalone Windows installer (`ForgeDesktop-Setup.exe`) using PyInstaller and Inno Setup, enabling zero-install, double-click execution with no external Python runtime required.
+
+---
+
 ## Technical Documentation & Architecture
 
 For in-depth specs and guides:
+- [Forge Desktop Guide](docs/DESKTOP.md)
 - [Workflow Authoring Guide](docs/WORKFLOW_AUTHORING.md)
 - [Workflow Authoring Audit](docs/WORKFLOW_AUTHORING_AUDIT.md)
 - [Configuration Guide](docs/CONFIGURATION.md)
