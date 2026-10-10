@@ -38,6 +38,8 @@ class TaskSpec:
     timeout: float | None = None
     description: str = ""
     outputs: dict[str, Any] | list[str] | None = None
+    when: str | bool | None = None
+    trigger_rule: str = "ALL_SUCCESS"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskSpec:
@@ -68,6 +70,8 @@ class TaskSpec:
         timeout = data.get("timeout")
         description = data.get("description", "")
         outputs = data.get("outputs")
+        when = data.get("when")
+        trigger_rule = data.get("trigger_rule", "ALL_SUCCESS")
 
         return cls(
             id=str(task_id) if task_id is not None else "",
@@ -81,6 +85,8 @@ class TaskSpec:
             timeout=float(timeout) if timeout is not None else None,
             description=str(description) if description else "",
             outputs=outputs,
+            when=when,
+            trigger_rule=str(trigger_rule).upper() if trigger_rule else "ALL_SUCCESS",
         )
 
 

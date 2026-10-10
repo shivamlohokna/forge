@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from forge.core.task import FailureStrategy
+from forge.core.conditions import validate_condition_syntax
+from forge.core.task import FailureStrategy, TriggerRule
 from forge.exceptions import WorkflowSpecError
 from forge.registry.task_registry import TaskRegistry
 
@@ -128,6 +129,30 @@ def validate_workflow_dict(data: dict[str, Any], registry: TaskRegistry) -> None
                 raise WorkflowSpecError(
                     f"{path_prefix}.timeout: must be a number > 0, got {timeout!r}."
                 )
+
+        # Validate trigger_rule if present
+        trigger_rule = t_data.get("trigger_rule")
+        if trigger_rule is not None:
+            valid_rules = {r.value for r in TriggerRule}
+            if not isinstance(trigger_rule, str) or trigger_rule.upper() not in valid_rules:
+                raise WorkflowSpecError(
+                    f"{path_prefix}.trigger_rule: invalid trigger_rule '{trigger_rule}'. Must be one of: {sorted(valid_rules)}."
+                )
+
+        # Validate when condition expression if present
+        when = t_data.get("when")
+        if when is not None:
+            if not isinstance(when, (str, bool)):
+                raise WorkflowSpecError(
+                    f"{path_prefix}.when: must be a string expression or boolean, got {type(when).__name__}."
+                )
+            if isinstance(when, str):
+                try:
+                    validate_condition_syntax(when)
+                except Exception as cond_err:
+                    raise WorkflowSpecError(
+                        f"{path_prefix}.when: invalid condition expression '{when}': {cond_err}"
+                    ) from cond_err
 
     # Second pass: validate dependency references
     for idx, t_data in enumerate(tasks):

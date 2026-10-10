@@ -97,6 +97,7 @@ class TaskResult:
     end_time: datetime | None = None
     duration_seconds: float = 0.0
     run_id: str | None = None
+    skip_reason: str | None = None
 
     @property
     def attempt_count(self) -> int:
@@ -152,6 +153,7 @@ class TaskResult:
             "task_name": self.task_name,
             "run_id": self.run_id,
             "status": self.status.value,
+            "skip_reason": self.skip_reason,
             "attempt_count": self.attempt_count,
             "attempts": [a.to_dict() for a in self.attempts],
             "output": self.output,
@@ -289,10 +291,15 @@ class WorkflowResult:
         ]
         for tr in self.task_results.values():
             status_tag = f"[{tr.status.value}]"
-            err_note = f" (Error: {tr.error_message})" if tr.error_message else ""
+            if tr.is_skipped and (tr.skip_reason or tr.error_message):
+                note = f" ({tr.skip_reason or tr.error_message})"
+            elif tr.error_message:
+                note = f" (Error: {tr.error_message})"
+            else:
+                note = ""
             lines.append(
                 f"  {status_tag:<11} {tr.task_name} "
-                f"(id: {tr.task_id}, attempts: {tr.attempt_count}, {tr.duration_seconds:.2f}s){err_note}"
+                f"(id: {tr.task_id}, attempts: {tr.attempt_count}, {tr.duration_seconds:.2f}s){note}"
             )
         lines.append("=======================================================")
         return "\n".join(lines)

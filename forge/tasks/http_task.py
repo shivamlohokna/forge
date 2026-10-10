@@ -22,6 +22,7 @@ from ..core.task import (
     FailureStrategy,
     RetryPolicy,
     Task,
+    TriggerRule,
 )
 from ..exceptions import TaskExecutionError, TaskTimeoutError
 
@@ -111,6 +112,9 @@ class HTTPTask(Task):
         failure_strategy: FailureStrategy | str = FailureStrategy.STOP,
         timeout: float | None = None,
         description: str = "",
+        when: str | bool | Any | None = None,
+        trigger_rule: TriggerRule | str = TriggerRule.ALL_SUCCESS,
+        **kwargs: Any,
     ) -> None:
         super().__init__(
             name=name,
@@ -121,6 +125,9 @@ class HTTPTask(Task):
             failure_strategy=failure_strategy,
             timeout=timeout,
             description=description,
+            when=when,
+            trigger_rule=trigger_rule,
+            **kwargs,
         )
 
         if not url or not url.strip():

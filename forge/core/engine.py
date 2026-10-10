@@ -35,7 +35,9 @@ from .task import (
     FailureStrategy,
     Task,
     TaskStatus,
+    TriggerRule,
 )
+from .conditions import evaluate_condition
 from .workflow import Workflow
 from ..exceptions import (
     CircularDependencyError,
@@ -271,22 +273,30 @@ class Engine:
             # Evaluate dependencies within the batch
             ready_tasks: list[Task] = []
             for task in batch:
-                blocking_dep = self._get_blocking_dependency(task)
-                if blocking_dep is not None:
-                    task.status = TaskStatus.BLOCKED
+                is_ready, not_ready_status, reason, blocking_dep = self._evaluate_task_readiness(task)
+                if not is_ready:
+                    task.status = not_ready_status
+                    task.skip_reason = reason if not_ready_status == TaskStatus.SKIPPED else None
                     task_res = TaskResult(
                         task_id=task.task_id,
                         task_name=task.name,
-                        status=TaskStatus.BLOCKED,
+                        status=not_ready_status,
                         run_id=workflow_result.run_id,
-                        error_message=(
-                            f"Blocked because prerequisite task '{blocking_dep.name}' "
-                            f"(status: {blocking_dep.status.value}) was not successful."
-                        ),
+                        error_message=reason,
+                        skip_reason=reason if not_ready_status == TaskStatus.SKIPPED else None,
                     )
                     workflow_result.add_task_result(task_res)
-                    self._notify("on_task_blocked", task, blocking_dep)
-                    self._emit_event(EventType.TASK_BLOCKED, workflow, task=task, data={"blocking_dependency": blocking_dep.name})
+                    if not_ready_status == TaskStatus.SKIPPED:
+                        self._notify("on_task_skipped", task)
+                        self._emit_event(EventType.TASK_SKIPPED, workflow, task=task, data={"reason": reason})
+                    else:
+                        self._notify("on_task_blocked", task, blocking_dep)
+                        self._emit_event(
+                            EventType.TASK_BLOCKED,
+                            workflow,
+                            task=task,
+                            data={"blocking_dependency": blocking_dep.name if blocking_dep else "rule"},
+                        )
                 else:
                     ready_tasks.append(task)
                     self._emit_event(EventType.TASK_READY, workflow, task=task)
@@ -324,13 +334,21 @@ class Engine:
 
 
             if halt_workflow:
-                self._cascade_blocked_to_unexecuted(all_tasks, workflow_result)
-                workflow.status = WorkflowStatus.FAILED
-                workflow_result.finish(WorkflowStatus.FAILED)
-                self._notify("on_workflow_finish", workflow, workflow_result)
-                self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "FAILED"})
-                self._persist_complete(workflow_result)
-                return workflow_result
+                # Check if any remaining unexecuted tasks have teardown/cleanup trigger rules
+                executed_ids = set(workflow_result.task_results.keys())
+                has_teardown_tasks = any(
+                    t.task_id not in executed_ids
+                    and getattr(t, "trigger_rule", TriggerRule.ALL_SUCCESS) in (TriggerRule.ALL_DONE, TriggerRule.ALL_FAILED)
+                    for t in all_tasks
+                )
+                if not has_teardown_tasks:
+                    self._cascade_blocked_to_unexecuted(all_tasks, workflow_result)
+                    workflow.status = WorkflowStatus.FAILED
+                    workflow_result.finish(WorkflowStatus.FAILED)
+                    self._notify("on_workflow_finish", workflow, workflow_result)
+                    self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "FAILED"})
+                    self._persist_complete(workflow_result)
+                    return workflow_result
 
         # 3. Finalize workflow status
         final_status = self._determine_final_workflow_status(workflow_result)
@@ -420,6 +438,62 @@ class Engine:
                 return dep
         return None
 
+    def _evaluate_task_readiness(self, task: Task) -> tuple[bool, TaskStatus, str, Task | None]:
+        """Evaluate dependencies according to task.trigger_rule.
+
+        Returns (is_ready, resulting_status_if_not_ready, reason, blocking_dependency).
+        """
+        if not task.dependencies:
+            return True, TaskStatus.RUNNING, "", None
+
+        rule = getattr(task, "trigger_rule", TriggerRule.ALL_SUCCESS)
+        deps = list(task.dependencies)
+
+        if rule == TriggerRule.ALL_SUCCESS:
+            for dep in deps:
+                if dep.status == TaskStatus.SKIPPED:
+                    return False, TaskStatus.SKIPPED, f"Upstream dependency '{dep.name}' was skipped.", dep
+                if dep.status != TaskStatus.SUCCESS:
+                    return (
+                        False,
+                        TaskStatus.BLOCKED,
+                        f"Blocked because prerequisite task '{dep.name}' (status: {dep.status.value}) was not successful.",
+                        dep,
+                    )
+            return True, TaskStatus.RUNNING, "", None
+
+        elif rule == TriggerRule.ALL_DONE:
+            for dep in deps:
+                if not dep.status.is_terminal:
+                    return False, TaskStatus.BLOCKED, f"Prerequisite task '{dep.name}' is not yet complete.", dep
+            return True, TaskStatus.RUNNING, "", None
+
+        elif rule == TriggerRule.NONE_FAILED:
+            for dep in deps:
+                if dep.status in (TaskStatus.FAILED, TaskStatus.CANCELLED):
+                    return False, TaskStatus.BLOCKED, f"Blocked because prerequisite task '{dep.name}' failed.", dep
+                if not dep.status.is_terminal:
+                    return False, TaskStatus.BLOCKED, f"Prerequisite task '{dep.name}' is not yet complete.", dep
+            return True, TaskStatus.RUNNING, "", None
+
+        elif rule == TriggerRule.ONE_SUCCESS:
+            for dep in deps:
+                if not dep.status.is_terminal:
+                    return False, TaskStatus.BLOCKED, f"Prerequisite task '{dep.name}' is not yet complete.", dep
+            if any(dep.status == TaskStatus.SUCCESS for dep in deps):
+                return True, TaskStatus.RUNNING, "", None
+            return False, TaskStatus.BLOCKED, "Blocked because no upstream dependency succeeded.", deps[0] if deps else None
+
+        elif rule == TriggerRule.ALL_FAILED:
+            for dep in deps:
+                if not dep.status.is_terminal:
+                    return False, TaskStatus.BLOCKED, f"Prerequisite task '{dep.name}' is not yet complete.", dep
+            if all(dep.status in (TaskStatus.FAILED, TaskStatus.BLOCKED) for dep in deps):
+                return True, TaskStatus.RUNNING, "", None
+            return False, TaskStatus.BLOCKED, "Blocked because not all upstream dependencies failed.", deps[0] if deps else None
+
+        return True, TaskStatus.RUNNING, "", None
+
     def _execute_task_with_retries(
         self,
         task: Task,
@@ -431,6 +505,37 @@ class Engine:
     ) -> TaskResult:
         """Run a single task handling execution, timeouts, retries, and failure strategies."""
         task_res = TaskResult(task_id=task.task_id, task_name=task.name, run_id=run_id)
+
+        # Check conditional execution ('when' clause) before running attempts
+        if getattr(task, "when", None) is not None:
+            with self._lock:
+                task_upstream_results = {}
+                for dep in task.dependencies:
+                    dep_output = upstream_outputs.get(dep.task_id)
+                    task_upstream_results[dep.task_id] = dep_output
+                    task_upstream_results[dep.name] = dep_output
+                current_outputs = dict(structured_outputs or {})
+
+            cond_context = ExecutionContext(
+                task_id=task.task_id,
+                task_name=task.name,
+                workflow_id=workflow.workflow_id,
+                workflow_name=workflow.name,
+                attempt=1,
+                parameters=parameters,
+                upstream_results=task_upstream_results,
+                outputs=current_outputs,
+            )
+            is_met, skip_reason = evaluate_condition(task.when, cond_context)
+            if not is_met:
+                task.status = TaskStatus.SKIPPED
+                task.skip_reason = skip_reason
+                task_res.status = TaskStatus.SKIPPED
+                task_res.skip_reason = skip_reason
+                task_res.error_message = skip_reason
+                self._notify("on_task_skipped", task)
+                self._emit_event(EventType.TASK_SKIPPED, workflow, task=task, data={"reason": skip_reason})
+                return task_res
 
         max_attempts = task.max_retries + 1 if task.failure_strategy == FailureStrategy.RETRY else 1
 

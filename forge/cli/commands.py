@@ -859,6 +859,12 @@ def plan_command(
                 "consumes": consumed_outputs,
                 "params": params_summary,
             }
+            if getattr(task, "when", None) is not None:
+                task_info["when"] = str(task.when)
+            rule = getattr(task, "trigger_rule", None)
+            if rule and getattr(rule, "value", str(rule)) != "ALL_SUCCESS":
+                task_info["trigger_rule"] = getattr(rule, "value", str(rule))
+
             batch_tasks.append(task_info)
             task_counter += 1
         formatted_batches.append({
@@ -902,6 +908,10 @@ def plan_command(
             print(f"       depends on: {deps_str}")
             if t.get("consumes"):
                 print(f"       consumes:   {', '.join(t['consumes'])}")
+            if t.get("when"):
+                print(f"       when:       {t['when']}")
+            if t.get("trigger_rule"):
+                print(f"       trigger:    {t['trigger_rule']}")
             if t["params"]:
                 p_str = ", ".join(f"{k}={v!r}" for k, v in t["params"].items())
                 print(f"       parameters: {p_str}")
@@ -1185,6 +1195,25 @@ def examples_command(
             "what_you_will_see": "Extracted features and model metrics file.",
             "how_to_customize": "Wire in pandas/scikit-learn training scripts.",
             "what_can_go_wrong": "Invalid CSV data format."
+        },
+        "conditional_branching": {
+            "name": "conditional_branching",
+            "category": "Advanced Orchestration",
+            "file": examples_dir / "declarative" / "conditional_branching.json",
+            "classification": "Standalone (Runs offline)",
+            "summary": "Multi-environment pipeline with conditional task execution and trigger rules",
+            "problem": "Execute selective tasks based on parameters and run cleanup via ALL_DONE trigger rules.",
+            "what_forge_does": [
+                "1. prepare_package (file): Writes deployment manifest",
+                "2. deploy_prod (file): Evaluates when condition and executes only for production",
+                "3. deploy_staging (file): Evaluates when condition and skips when not staging",
+                "4. cleanup (file): Executes with trigger_rule=ALL_DONE to run after upstream branches"
+            ],
+            "what_you_need": ["Local filesystem access"],
+            "run_command": "forge run conditional_branching.json --param environment=staging",
+            "what_you_will_see": "Selective task execution with skipped non-matching branches and completed cleanup.",
+            "how_to_customize": "Add staging/prod credentials or customize when expressions.",
+            "what_can_go_wrong": "Condition syntax error in when expression."
         },
     }
 

@@ -24,6 +24,7 @@ Single shell scripts and ad-hoc Python scripts break easily:
 
 **Forge solves this:**
 - **Deterministic DAG Scheduling**: Automatically resolves task order and detects circular dependencies.
+- **Conditional Execution & Trigger Rules**: Skip or branch tasks based on parameters, outputs, or environment variables. Trigger cleanup handlers even when upstream tasks fail.
 - **Durable History**: Every workflow execution, task status, duration, and output is saved in SQLite.
 - **Granular Retries & Timeouts**: Automatically retry flaky network/filesystem operations with linear or exponential backoff.
 - **Human-Centric CLI**: Instantly inspect status, attempt logs, and diagnostic health.
@@ -189,6 +190,32 @@ forge examples --copy build_test
 
 ---
 
+## Conditional Execution & Trigger Rules
+
+Skip or branch tasks at runtime based on parameters, upstream outputs, or environment variables using `when` clauses. Control how downstream tasks react to upstream failures or skips with `trigger_rule`:
+
+```json
+{
+  "id": "deploy_prod",
+  "type": "shell",
+  "depends_on": ["build"],
+  "when": "{{ parameters.environment == 'production' }}",
+  "params": { "command": "python deploy.py --env prod" }
+}
+```
+
+| Trigger Rule | Behavior |
+| :--- | :--- |
+| `ALL_SUCCESS` *(default)* | All upstream dependencies must succeed |
+| `ALL_DONE` | Runs after all upstream tasks complete (even if failed or skipped) — ideal for cleanup/teardown |
+| `NONE_FAILED` | Runs if no upstream dependency failed (allows skipped) |
+| `ONE_SUCCESS` | Runs if at least one upstream dependency succeeded |
+| `ALL_FAILED` | Runs only if all upstream dependencies failed — ideal for error alerting |
+
+See [Conditional Execution Guide](docs/CONDITIONAL_EXECUTION.md) for full reference.
+
+---
+
 ## Python API Usage
 
 You can also assemble DAG workflows using Python code and intuitive dependency operators (`>>` / `<<`):
@@ -295,6 +322,7 @@ For in-depth specs and guides:
 - [Configuration Guide](docs/CONFIGURATION.md)
 - [Declarative Specification](docs/DECLARATIVE_SPEC.md)
 - [Plugin Authoring Guide](docs/PLUGINS.md)
+- [Conditional Execution & Trigger Rules](docs/CONDITIONAL_EXECUTION.md)
 - [Productization & Reliability Audit](docs/PRODUCTIZATION_AUDIT.md)
 
 ---

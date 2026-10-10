@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from forge.core.task import TriggerRule
 from forge.core.workflow import Workflow
 from forge.declarative.interpolation import interpolate
 from forge.declarative.parsers import (
@@ -187,14 +188,30 @@ def load_declarative_workflow(
             "retry_delay": task_spec.retry_delay,
             "failure_strategy": task_spec.failure_strategy,
             "description": task_spec.description,
+            "when": task_spec.when,
+            "trigger_rule": task_spec.trigger_rule,
             **params,
         }
         if task_spec.timeout is not None:
             kwargs["timeout"] = task_spec.timeout
 
         try:
-            task = target_registry.create(task_spec.type, **kwargs)
+            task_kwargs = dict(kwargs)
+            try:
+                task = target_registry.create(task_spec.type, **task_kwargs)
+            except TypeError:
+                # Fallback if custom plugin task constructor doesn't accept when/trigger_rule
+                task_kwargs.pop("when", None)
+                task_kwargs.pop("trigger_rule", None)
+                task = target_registry.create(task_spec.type, **task_kwargs)
+
             task.raw_params = dict(params)
+            task.when = task_spec.when
+            if task_spec.trigger_rule:
+                try:
+                    task.trigger_rule = TriggerRule(task_spec.trigger_rule.upper())
+                except ValueError:
+                    pass
         except Exception as exc:
             raise WorkflowSpecError(
                 f"Failed to construct task '{task_spec.id}' of type '{task_spec.type}': {exc}"

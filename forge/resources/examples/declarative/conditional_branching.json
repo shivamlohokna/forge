@@ -1,0 +1,52 @@
+{
+  "name": "ConditionalBranchingPipeline",
+  "description": "Multi-environment deployment pipeline with conditional task execution and cleanup trigger rules",
+  "parameters": {
+    "environment": "production",
+    "deploy": true
+  },
+  "tasks": [
+    {
+      "id": "prepare_package",
+      "type": "file",
+      "params": {
+        "operation": "write",
+        "path": "dist/manifest.json",
+        "content": "{\"status\": \"ready\", \"env\": \"{{ environment }}\"}"
+      }
+    },
+    {
+      "id": "deploy_prod",
+      "type": "file",
+      "depends_on": ["prepare_package"],
+      "when": "{{ parameters.environment == 'production' and parameters.deploy == true }}",
+      "params": {
+        "operation": "write",
+        "path": "dist/deployed_prod.txt",
+        "content": "Production deployment successful: manifest={{ outputs.prepare_package.path }}"
+      }
+    },
+    {
+      "id": "deploy_staging",
+      "type": "file",
+      "depends_on": ["prepare_package"],
+      "when": "{{ parameters.environment == 'staging' }}",
+      "params": {
+        "operation": "write",
+        "path": "dist/deployed_staging.txt",
+        "content": "Staging deployment successful."
+      }
+    },
+    {
+      "id": "cleanup",
+      "type": "file",
+      "depends_on": ["deploy_prod", "deploy_staging"],
+      "trigger_rule": "all_done",
+      "params": {
+        "operation": "write",
+        "path": "dist/pipeline_complete.txt",
+        "content": "Pipeline finished and verified."
+      }
+    }
+  ]
+}

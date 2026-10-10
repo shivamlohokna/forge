@@ -11,7 +11,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 
 class TaskStatus(str, Enum):
@@ -36,11 +36,20 @@ class TaskStatus(str, Enum):
             TaskStatus.CANCELLED,
         )
 
-
     @property
     def is_successful(self) -> bool:
         """Return True if the task finished successfully."""
         return self == TaskStatus.SUCCESS
+
+
+class TriggerRule(str, Enum):
+    """Policies dictating when a task is eligible to execute based on upstream dependency states."""
+
+    ALL_SUCCESS = "ALL_SUCCESS"  # All upstream dependencies must succeed (default)
+    ALL_DONE = "ALL_DONE"        # All upstream dependencies must be terminal (SUCCESS, FAILED, or SKIPPED)
+    NONE_FAILED = "NONE_FAILED"  # Upstream dependencies must be SUCCESS or SKIPPED (no FAILED)
+    ONE_SUCCESS = "ONE_SUCCESS"  # At least one upstream dependency must be SUCCESS
+    ALL_FAILED = "ALL_FAILED"    # All upstream dependencies must have FAILED
 
 
 class FailureStrategy(str, Enum):
@@ -128,6 +137,8 @@ class Task(ABC):
         failure_strategy: FailureStrategy | str = FailureStrategy.STOP,
         timeout: float | None = None,
         description: str = "",
+        when: str | bool | Callable[[ExecutionContext], bool] | None = None,
+        trigger_rule: TriggerRule | str = TriggerRule.ALL_SUCCESS,
     ) -> None:
         if not name or not name.strip():
             raise ValueError("Task name cannot be empty.")
@@ -156,6 +167,22 @@ class Task(ABC):
                 )
         else:
             self.failure_strategy = failure_strategy
+
+        # Trigger rule
+        if isinstance(trigger_rule, str):
+            try:
+                self.trigger_rule: TriggerRule = TriggerRule(trigger_rule.upper())
+            except ValueError:
+                valid_rules = [r.value for r in TriggerRule]
+                raise ValueError(
+                    f"Invalid trigger_rule '{trigger_rule}'. Must be one of: {valid_rules}"
+                )
+        else:
+            self.trigger_rule = trigger_rule
+
+        # Conditional execution
+        self.when: str | bool | Callable[[ExecutionContext], bool] | None = when
+        self.skip_reason: str | None = None
 
         # Execution constraints
         self.timeout: float | None = timeout
