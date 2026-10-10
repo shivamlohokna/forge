@@ -1,5 +1,6 @@
 """Tests for Phase 4 Concurrency, Parallel Execution, Cancellation, and Events."""
 
+import threading
 import time
 import unittest
 
@@ -21,13 +22,20 @@ class TestConcurrencyAndInfrastructure(unittest.TestCase):
 
     def test_parallel_batch_execution_speedup(self):
         """Verify that independent tasks run concurrently instead of sequentially."""
-        def sleep_task():
-            time.sleep(0.15)
+        barrier = threading.Barrier(3, timeout=5.0)
+        thread_ids: set[int] = set()
+        lock = threading.Lock()
+
+        def barrier_task():
+            with lock:
+                thread_ids.add(threading.get_ident())
+            # All 3 tasks must rendezvous concurrently; raises BrokenBarrierError if sequential
+            barrier.wait()
             return "done"
 
-        t1 = FunctionTask("Task1", fn=sleep_task)
-        t2 = FunctionTask("Task2", fn=sleep_task)
-        t3 = FunctionTask("Task3", fn=sleep_task)
+        t1 = FunctionTask("Task1", fn=barrier_task)
+        t2 = FunctionTask("Task2", fn=barrier_task)
+        t3 = FunctionTask("Task3", fn=barrier_task)
 
         # All 3 are independent (same batch)
         wf = Workflow("Parallel WF").add_tasks(t1, t2, t3)
@@ -40,8 +48,10 @@ class TestConcurrencyAndInfrastructure(unittest.TestCase):
 
         self.assertTrue(result.is_success)
         self.assertEqual(result.total_tasks, 3)
-        # 3 tasks * 0.15s = 0.45s sequentially. Parallel should finish in < 0.30s
-        self.assertLess(elapsed, 0.30)
+        # Verify all 3 tasks rendezvoused concurrently across 3 distinct worker threads
+        self.assertEqual(len(thread_ids), 3)
+        # Synchronous rendezvous finishes almost instantaneously without hitting the barrier timeout
+        self.assertLess(elapsed, 2.0)
 
     def test_concurrency_worker_limits(self):
         """Verify max_workers=2 limits parallel workers."""
