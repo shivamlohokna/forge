@@ -29,7 +29,7 @@ gui = ["PySide6>=6.5.0"]
 
 [project.scripts]
 forge = "forge.cli.main:main"
-forge-gui = "forge_gui:main"
+forge-gui = "forge.desktop:launch"
 
 [tool.setuptools.packages.find]
 where = ["."]

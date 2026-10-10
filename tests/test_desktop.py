@@ -5,6 +5,8 @@ workflow editing, validation integration, and background execution
 using PySide6's offscreen platform.
 """
 
+from __future__ import annotations
+
 import json
 import sys
 import tempfile
@@ -12,35 +14,30 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-# Safe guard for headless CI environments without PySide6
-try:
-    if "-platform" not in sys.argv:
-        sys.argv.extend(["-platform", "offscreen"])
-    from PySide6.QtWidgets import QApplication
-    _app = QApplication.instance() or QApplication(sys.argv)
-    HAS_PYSIDE6 = True
-except (ImportError, Exception):
-    HAS_PYSIDE6 = False
-
-if not HAS_PYSIDE6:
-    import pytest
-    pytestmark = pytest.mark.skip(reason="PySide6 is not available in environment")
-
-
 from forge.desktop.paths import (
     ensure_app_directories,
     get_app_data_dir,
     get_database_path,
     get_workflows_dir,
 )
-from forge.desktop.styles import MAIN_STYLESHEET
 from forge.desktop.templates import get_starter_templates, get_template_by_id
-from forge.desktop.main_window import ForgeMainWindow
-from forge.desktop.views.home_view import HomeView
-from forge.desktop.views.editor_view import TaskEditDialog, WorkflowEditorView
-from forge.desktop.views.workflows_view import WorkflowsView
-from forge.desktop.views.history_view import HistoryView
-from forge.desktop.views.settings_view import SettingsView
+
+# Safe guard for headless CI environments without PySide6
+try:
+    if "-platform" not in sys.argv:
+        sys.argv.extend(["-platform", "offscreen"])
+    from PySide6.QtWidgets import QApplication
+    _app = QApplication.instance() or QApplication(sys.argv)
+    from forge.desktop.styles import MAIN_STYLESHEET
+    from forge.desktop.main_window import ForgeMainWindow
+    from forge.desktop.views.home_view import HomeView
+    from forge.desktop.views.editor_view import TaskEditDialog, WorkflowEditorView
+    from forge.desktop.views.workflows_view import WorkflowsView
+    from forge.desktop.views.history_view import HistoryView
+    from forge.desktop.views.settings_view import SettingsView
+    HAS_PYSIDE6 = True
+except (ImportError, Exception):
+    HAS_PYSIDE6 = False
 
 
 class TestDesktopPaths(unittest.TestCase):
@@ -106,8 +103,14 @@ class TestDesktopMainWindow(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        if not HAS_PYSIDE6:
+            raise unittest.SkipTest("PySide6 is not available in environment")
         _app.setStyleSheet(MAIN_STYLESHEET)
         cls.window = ForgeMainWindow()
+
+    def setUp(self):
+        if not HAS_PYSIDE6:
+            self.skipTest("PySide6 is not available in environment")
 
     def test_window_creates_successfully(self):
         self.assertIsNotNone(self.window)
@@ -136,6 +139,8 @@ class TestDesktopEditorView(unittest.TestCase):
     """Test the workflow editor view."""
 
     def setUp(self):
+        if not HAS_PYSIDE6:
+            self.skipTest("PySide6 is not available in environment")
         self.editor = WorkflowEditorView()
 
     def test_set_workflow_populates_fields(self):
@@ -203,6 +208,10 @@ class TestDesktopEditorView(unittest.TestCase):
 class TestDesktopHistoryView(unittest.TestCase):
     """Test history view construction."""
 
+    def setUp(self):
+        if not HAS_PYSIDE6:
+            self.skipTest("PySide6 is not available in environment")
+
     def test_creates_without_database(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch("forge.desktop.views.history_view.get_database_path",
@@ -214,6 +223,10 @@ class TestDesktopHistoryView(unittest.TestCase):
 class TestDesktopSettingsView(unittest.TestCase):
     """Test settings view construction."""
 
+    def setUp(self):
+        if not HAS_PYSIDE6:
+            self.skipTest("PySide6 is not available in environment")
+
     def test_creates_successfully(self):
         view = SettingsView()
         self.assertIsNotNone(view)
@@ -222,10 +235,13 @@ class TestDesktopSettingsView(unittest.TestCase):
 class TestDesktopWorkflowExecution(unittest.TestCase):
     """Integration test: run a real workflow through the desktop runner."""
 
+    def setUp(self):
+        if not HAS_PYSIDE6:
+            self.skipTest("PySide6 is not available in environment")
+
     def test_run_file_task_workflow_via_runner(self):
         """Execute a file-write workflow via WorkflowRunnerThread and verify results."""
         from forge.desktop.runner import WorkflowRunnerThread
-        from PySide6.QtCore import QEventLoop, QTimer
 
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "test.db"
