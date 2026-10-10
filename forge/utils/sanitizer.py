@@ -155,6 +155,48 @@ def sanitize(value: Any, *, _depth: int = 0) -> Any:
     return value
 
 
+import re as _re
+
+_URL_CREDENTIALS_RE = _re.compile(
+    r"([a-zA-Z][a-zA-Z0-9+.-]*://[^/:]+:)([^@/]+)(@)"
+)
+_BEARER_TOKEN_RE = _re.compile(
+    r"(?i)(bearer\s+|token\s+)([A-Za-z0-9_\-\.~+/=]{6,})"
+)
+_KEY_VALUE_SECRET_RE = _re.compile(
+    r"(?i)\b(password|secret|api[_-]?key|access[_-]?token|credential|passphrase)\s*([:=])\s*([^\s,;\'\"&]+)"
+)
+
+
+def sanitize_text(text: str) -> str:
+    """Mask credentials, tokens, and secrets from free-form text, URLs, or errors.
+
+    - Masks URL embedded passwords (e.g. https://user:pass@host -> https://user:***@host)
+    - Masks Authorization headers (e.g. Bearer secret123 -> Bearer ***)
+    - Masks common key-value assignments (e.g. password=secret -> password=***)
+
+    Args:
+        text: The string to sanitize.
+
+    Returns:
+        Sanitized string with sensitive tokens replaced with MASK.
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    sanitized = _URL_CREDENTIALS_RE.sub(rf"\g<1>{MASK}\g<3>", text)
+    sanitized = _BEARER_TOKEN_RE.sub(rf"\g<1>{MASK}", sanitized)
+    sanitized = _KEY_VALUE_SECRET_RE.sub(rf"\g<1>\g<2>{MASK}", sanitized)
+    return sanitized
+
+
+def sanitize_error(error_message: str | None) -> str | None:
+    """Sanitize an optional error message string."""
+    if error_message is None:
+        return None
+    return sanitize_text(error_message)
+
+
 # ── Module exports ────────────────────────────────────────────────────────────
 
 __all__ = [
@@ -162,4 +204,6 @@ __all__ = [
     "SENSITIVE_KEY_PATTERNS",
     "is_sensitive_key",
     "sanitize",
+    "sanitize_text",
+    "sanitize_error",
 ]

@@ -39,3 +39,6 @@ forge = [
     "resources/examples/declarative/*"
 ]
 
+[tool.pytest.ini_options]
+addopts = "--capture=sys"
+

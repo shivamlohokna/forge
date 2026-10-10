@@ -323,6 +323,7 @@ For in-depth specs and guides:
 - [Declarative Specification](docs/DECLARATIVE_SPEC.md)
 - [Plugin Authoring Guide](docs/PLUGINS.md)
 - [Conditional Execution & Trigger Rules](docs/CONDITIONAL_EXECUTION.md)
+- [Operational Reliability Guide](docs/OPERATIONAL_RELIABILITY.md)
 - [Productization & Reliability Audit](docs/PRODUCTIZATION_AUDIT.md)
 
 ---

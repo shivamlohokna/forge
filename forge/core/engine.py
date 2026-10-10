@@ -257,106 +257,117 @@ class Engine:
         upstream_outputs: dict[str, Any] = {}
         structured_outputs: dict[str, dict[str, Any]] = {}
 
-
-        # 2. Iterate through topological batches (tasks within a batch are independent)
-        for batch_idx, batch in enumerate(batches):
-            # Check for cancellation before starting the batch
-            if self._cancel_requested:
-                self._cancel_remaining_tasks(batches[batch_idx:], workflow_result, workflow)
-                workflow.status = WorkflowStatus.CANCELLED
-                workflow_result.finish(WorkflowStatus.CANCELLED)
-                self._notify("on_workflow_finish", workflow, workflow_result)
-                self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "CANCELLED"})
-                self._persist_complete(workflow_result)
-                return workflow_result
-
-            # Evaluate dependencies within the batch
-            ready_tasks: list[Task] = []
-            for task in batch:
-                is_ready, not_ready_status, reason, blocking_dep = self._evaluate_task_readiness(task)
-                if not is_ready:
-                    task.status = not_ready_status
-                    task.skip_reason = reason if not_ready_status == TaskStatus.SKIPPED else None
-                    task_res = TaskResult(
-                        task_id=task.task_id,
-                        task_name=task.name,
-                        status=not_ready_status,
-                        run_id=workflow_result.run_id,
-                        error_message=reason,
-                        skip_reason=reason if not_ready_status == TaskStatus.SKIPPED else None,
-                    )
-                    workflow_result.add_task_result(task_res)
-                    if not_ready_status == TaskStatus.SKIPPED:
-                        self._notify("on_task_skipped", task)
-                        self._emit_event(EventType.TASK_SKIPPED, workflow, task=task, data={"reason": reason})
-                    else:
-                        self._notify("on_task_blocked", task, blocking_dep)
-                        self._emit_event(
-                            EventType.TASK_BLOCKED,
-                            workflow,
-                            task=task,
-                            data={"blocking_dependency": blocking_dep.name if blocking_dep else "rule"},
-                        )
-                else:
-                    ready_tasks.append(task)
-                    self._emit_event(EventType.TASK_READY, workflow, task=task)
-
-            if not ready_tasks:
-                continue
-
-            # Execute ready tasks (either sequentially or concurrently via executor)
-            batch_results = self._execute_batch(
-                ready_tasks=ready_tasks,
-                workflow=workflow,
-                parameters=combined_params,
-                upstream_outputs=upstream_outputs,
-                structured_outputs=structured_outputs,
-                run_id=workflow_result.run_id,
-            )
-
-            # Process completed batch results
-            halt_workflow = False
-            for task, task_res in batch_results:
-                workflow_result.add_task_result(task_res)
-                self._persist_task_result(workflow_result.run_id, task_res)
-
-                if task.status == TaskStatus.SUCCESS:
-                    from forge.core.output import get_structured_output
-                    struct_out = get_structured_output(task_res.output)
-                    with self._lock:
-                        upstream_outputs[task.task_id] = task_res.output
-                        upstream_outputs[task.name] = task_res.output
-                        structured_outputs[task.task_id] = struct_out
-                        structured_outputs[task.name] = struct_out
-                elif task.status == TaskStatus.FAILED:
-                    if task.failure_strategy in (FailureStrategy.STOP, FailureStrategy.RETRY):
-                        halt_workflow = True
-
-
-            if halt_workflow:
-                # Check if any remaining unexecuted tasks have teardown/cleanup trigger rules
-                executed_ids = set(workflow_result.task_results.keys())
-                has_teardown_tasks = any(
-                    t.task_id not in executed_ids
-                    and getattr(t, "trigger_rule", TriggerRule.ALL_SUCCESS) in (TriggerRule.ALL_DONE, TriggerRule.ALL_FAILED)
-                    for t in all_tasks
-                )
-                if not has_teardown_tasks:
-                    self._cascade_blocked_to_unexecuted(all_tasks, workflow_result)
-                    workflow.status = WorkflowStatus.FAILED
-                    workflow_result.finish(WorkflowStatus.FAILED)
+        try:
+            # 2. Iterate through topological batches (tasks within a batch are independent)
+            for batch_idx, batch in enumerate(batches):
+                # Check for cancellation before starting the batch
+                if self._cancel_requested:
+                    self._cancel_remaining_tasks(batches[batch_idx:], workflow_result, workflow)
+                    workflow.status = WorkflowStatus.CANCELLED
+                    workflow_result.finish(WorkflowStatus.CANCELLED)
                     self._notify("on_workflow_finish", workflow, workflow_result)
-                    self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "FAILED"})
+                    self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "CANCELLED"})
                     self._persist_complete(workflow_result)
                     return workflow_result
 
-        # 3. Finalize workflow status
-        final_status = self._determine_final_workflow_status(workflow_result)
-        workflow.status = final_status
-        workflow_result.finish(final_status)
-        self._notify("on_workflow_finish", workflow, workflow_result)
-        self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": final_status.value})
-        self._persist_complete(workflow_result)
+                # Evaluate dependencies within the batch
+                ready_tasks: list[Task] = []
+                for task in batch:
+                    is_ready, not_ready_status, reason, blocking_dep = self._evaluate_task_readiness(task)
+                    if not is_ready:
+                        task.status = not_ready_status
+                        task.skip_reason = reason if not_ready_status == TaskStatus.SKIPPED else None
+                        task_res = TaskResult(
+                            task_id=task.task_id,
+                            task_name=task.name,
+                            status=not_ready_status,
+                            run_id=workflow_result.run_id,
+                            error_message=reason,
+                            skip_reason=reason if not_ready_status == TaskStatus.SKIPPED else None,
+                        )
+                        workflow_result.add_task_result(task_res)
+                        if not_ready_status == TaskStatus.SKIPPED:
+                            self._notify("on_task_skipped", task)
+                            self._emit_event(EventType.TASK_SKIPPED, workflow, task=task, data={"reason": reason})
+                        else:
+                            self._notify("on_task_blocked", task, blocking_dep)
+                            self._emit_event(
+                                EventType.TASK_BLOCKED,
+                                workflow,
+                                task=task,
+                                data={"blocking_dependency": blocking_dep.name if blocking_dep else "rule"},
+                            )
+                    else:
+                        ready_tasks.append(task)
+                        self._emit_event(EventType.TASK_READY, workflow, task=task)
+
+                if not ready_tasks:
+                    continue
+
+                # Execute ready tasks (either sequentially or concurrently via executor)
+                batch_results = self._execute_batch(
+                    ready_tasks=ready_tasks,
+                    workflow=workflow,
+                    parameters=combined_params,
+                    upstream_outputs=upstream_outputs,
+                    structured_outputs=structured_outputs,
+                    run_id=workflow_result.run_id,
+                )
+
+                # Process completed batch results
+                halt_workflow = False
+                for task, task_res in batch_results:
+                    workflow_result.add_task_result(task_res)
+                    self._persist_task_result(workflow_result.run_id, task_res)
+
+                    if task.status == TaskStatus.SUCCESS:
+                        from forge.core.output import get_structured_output
+                        struct_out = get_structured_output(task_res.output)
+                        with self._lock:
+                            upstream_outputs[task.task_id] = task_res.output
+                            upstream_outputs[task.name] = task_res.output
+                            structured_outputs[task.task_id] = struct_out
+                            structured_outputs[task.name] = struct_out
+                    elif task.status == TaskStatus.FAILED:
+                        if task.failure_strategy in (FailureStrategy.STOP, FailureStrategy.RETRY):
+                            halt_workflow = True
+
+                if halt_workflow:
+                    # Check if any remaining unexecuted tasks have teardown/cleanup trigger rules
+                    executed_ids = set(workflow_result.task_results.keys())
+                    has_teardown_tasks = any(
+                        t.task_id not in executed_ids
+                        and getattr(t, "trigger_rule", TriggerRule.ALL_SUCCESS) in (TriggerRule.ALL_DONE, TriggerRule.ALL_FAILED)
+                        for t in all_tasks
+                    )
+                    if not has_teardown_tasks:
+                        self._cascade_blocked_to_unexecuted(all_tasks, workflow_result)
+                        workflow.status = WorkflowStatus.FAILED
+                        workflow_result.finish(WorkflowStatus.FAILED)
+                        self._notify("on_workflow_finish", workflow, workflow_result)
+                        self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "FAILED"})
+                        self._persist_complete(workflow_result)
+                        return workflow_result
+
+            # 3. Finalize workflow status
+            final_status = self._determine_final_workflow_status(workflow_result)
+            workflow.status = final_status
+            workflow_result.finish(final_status)
+            self._notify("on_workflow_finish", workflow, workflow_result)
+            self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": final_status.value})
+            self._persist_complete(workflow_result)
+
+            return workflow_result
+
+        except KeyboardInterrupt:
+            # Handle user interruption cleanly and persist terminal status
+            self._cancel_remaining_tasks(batches, workflow_result, workflow)
+            workflow.status = WorkflowStatus.CANCELLED
+            workflow_result.finish(WorkflowStatus.CANCELLED)
+            self._notify("on_workflow_finish", workflow, workflow_result)
+            self._emit_event(EventType.WORKFLOW_FINISHED, workflow, data={"status": "CANCELLED", "interrupted": True})
+            self._persist_complete(workflow_result)
+            raise
 
         return workflow_result
 
@@ -625,10 +636,22 @@ class Engine:
 
             # Evaluate retry
             if task.failure_strategy == FailureStrategy.RETRY and attempt < max_attempts:
+                if self._cancel_requested:
+                    task.status = TaskStatus.CANCELLED
+                    task_res.status = TaskStatus.CANCELLED
+                    return task_res
                 delay = task.retry_policy.get_delay_for_attempt(attempt)
                 self._notify("on_task_retry", task, attempt, delay, error)
                 if delay > 0:
-                    time.sleep(delay)
+                    slept = 0.0
+                    while slept < delay:
+                        if self._cancel_requested:
+                            task.status = TaskStatus.CANCELLED
+                            task_res.status = TaskStatus.CANCELLED
+                            return task_res
+                        step = min(0.1, delay - slept)
+                        time.sleep(step)
+                        slept += step
                 continue
 
             # No more retries; apply failure strategy

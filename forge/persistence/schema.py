@@ -188,6 +188,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     """
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     # Allow concurrent CLI commands to wait up to 5 s before failing with
     # "database is locked" instead of immediately raising an error.
     conn.execute("PRAGMA busy_timeout = 5000;")

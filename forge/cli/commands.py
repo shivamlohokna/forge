@@ -121,6 +121,10 @@ def run_command(
         if _interrupted[0]:
             return 130  # Convention: 128 + signal number (SIGINT=2 → 130)
         return 0 if result.status == WorkflowStatus.SUCCESS else 1
+    except KeyboardInterrupt:
+        if not quiet:
+            print("\n[forge] Execution interrupted by user.", file=sys.stderr)
+        return 130
     except (CircularDependencyError, MissingDependencyError, ForgeError) as e:
         print(f"Validation error: {e}", file=sys.stderr)
         return 3
@@ -698,7 +702,7 @@ def doctor_command(
         "details": cfg_msg,
     })
 
-    # 4. State & Database accessibility
+    # 4. State & Database accessibility and durability
     resolved_db_path = db_path or (cfg.database if cfg and cfg.database else "forge.db")
     target_db = Path(resolved_db_path)
     db_ok = True
@@ -708,12 +712,32 @@ def doctor_command(
         test_file = target_db.parent / ".forge_perm_check"
         test_file.write_text("test", encoding="utf-8")
         test_file.unlink(missing_ok=True)
+
+        if target_db.is_file():
+            import sqlite3
+            test_conn = sqlite3.connect(str(target_db), timeout=5.0)
+            try:
+                quick_res = test_conn.execute("PRAGMA quick_check;").fetchone()
+                if quick_res and quick_res[0] != "ok":
+                    db_ok = False
+                    db_details = f"Database integrity check failed: {quick_res[0]}"
+                else:
+                    journal_mode = test_conn.execute("PRAGMA journal_mode;").fetchone()[0]
+                    orphans_row = test_conn.execute(
+                        "SELECT COUNT(*) FROM workflow_runs WHERE status = 'RUNNING';"
+                    ).fetchone()
+                    orphans_count = orphans_row[0] if orphans_row else 0
+                    db_details = f"SQLite verified (journal={journal_mode}, integrity=OK, {orphans_count} active/orphaned run(s))"
+            finally:
+                test_conn.close()
+        else:
+            db_details = f"Directory '{target_db.parent}' is writable (database not yet created)"
     except Exception as exc:
         db_ok = False
-        db_details = f"Directory '{target_db.parent}' is not writable: {exc}"
+        db_details = f"Database diagnostic error: {exc}"
 
     checks.append({
-        "name": "Database & State Directory",
+        "name": "Database & State Durability",
         "status": "OK" if db_ok else "ERROR",
         "details": db_details,
     })

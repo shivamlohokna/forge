@@ -11,14 +11,19 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator
 
 from forge.utils.pid import is_process_alive
-from forge.utils.sanitizer import sanitize as _sanitize_output
+from forge.utils.sanitizer import (
+    sanitize as _sanitize_output,
+    sanitize_error as _sanitize_error,
+)
 
 from .models import (
     TaskAttemptRecord,
@@ -63,6 +68,7 @@ class ExecutionStore:
 
         conn = sqlite3.connect(
             str(db_path),
+            timeout=15.0,
             check_same_thread=False,
         )
 
@@ -101,15 +107,27 @@ class ExecutionStore:
     # ── Internal helpers ────────────────────────────────────────────────────
 
     @contextmanager
-    def _transaction(self) -> Generator[sqlite3.Cursor, None, None]:
-        """Yield a cursor inside a serialized, auto-committed transaction."""
+    def _transaction(self, max_retries: int = 5, base_delay: float = 0.05) -> Generator[sqlite3.Cursor, None, None]:
+        """Yield a cursor inside a serialized, auto-committed transaction with busy retry."""
         with self._lock:
             cur = self._conn.cursor()
             try:
                 yield cur
-                self._conn.commit()
+                for attempt in range(max_retries):
+                    try:
+                        self._conn.commit()
+                        break
+                    except sqlite3.OperationalError as exc:
+                        msg = str(exc).lower()
+                        if ("locked" in msg or "busy" in msg) and attempt < max_retries - 1:
+                            time.sleep(base_delay * (2 ** attempt) + random.uniform(0.01, 0.03))
+                            continue
+                        raise
             except Exception:
-                self._conn.rollback()
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
                 raise
             finally:
                 cur.close()
@@ -138,8 +156,8 @@ class ExecutionStore:
             workflow_name=workflow_name,
             status=status,
             started_at=started_at or _now_iso(),
-            parameters=_to_json(parameters or {}),
-            metadata=_to_json(metadata or {}),
+            parameters=_to_json(_sanitize_output(parameters or {})),
+            metadata=_to_json(_sanitize_output(metadata or {})),
             worker_pid=worker_pid,
         )
 
@@ -203,6 +221,8 @@ class ExecutionStore:
             else None
         )
 
+        sanitized_error = _sanitize_error(error_message)
+
         record = TaskRunRecord(
             task_run_id=task_run_id,
             run_id=run_id,
@@ -217,7 +237,7 @@ class ExecutionStore:
                 if sanitized_output is not None
                 else None
             ),
-            error_message=error_message,
+            error_message=sanitized_error,
             error_traceback=error_traceback,
         )
 
@@ -274,6 +294,8 @@ class ExecutionStore:
         error_traceback: str | None,
     ) -> TaskAttemptRecord:
         """Insert a task attempt row."""
+        sanitized_error = _sanitize_error(error_message)
+
         record = TaskAttemptRecord(
             task_run_id=task_run_id,
             attempt_number=attempt_number,
@@ -286,7 +308,7 @@ class ExecutionStore:
                 if output is not None
                 else None
             ),
-            error_message=error_message,
+            error_message=sanitized_error,
             error_traceback=error_traceback,
         )
 
@@ -456,6 +478,32 @@ class ExecutionStore:
 
                 if cur.rowcount == 1:
                     recovered.append(run_id)
+                    # Also cascade recovery to in-flight task runs and attempts
+                    interrupted_msg = f"Interrupted: worker process {pid} terminated unexpectedly"
+                    cur.execute(
+                        """
+                        UPDATE task_runs
+                        SET
+                            status = 'FAILED',
+                            finished_at = ?,
+                            error_message = COALESCE(error_message, ?)
+                        WHERE run_id = ?
+                          AND status IN ('RUNNING', 'PENDING')
+                        """,
+                        (finished_at, interrupted_msg, run_id),
+                    )
+                    cur.execute(
+                        """
+                        UPDATE task_attempts
+                        SET
+                            status = 'FAILED',
+                            finished_at = ?,
+                            error_message = COALESCE(error_message, ?)
+                        WHERE task_run_id IN (SELECT task_run_id FROM task_runs WHERE run_id = ?)
+                          AND status = 'RUNNING'
+                        """,
+                        (finished_at, interrupted_msg, run_id),
+                    )
                     logger.info(
                         "Recovered orphaned run %s (worker_pid=%d was dead)",
                         run_id,

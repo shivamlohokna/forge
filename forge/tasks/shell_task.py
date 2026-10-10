@@ -166,11 +166,14 @@ class ShellTask(Task):
             )
         except subprocess.TimeoutExpired:
             # Kill process tree immediately on timeout
-            proc.kill()
-            proc.communicate()  # Drain remaining pipes
+            self._terminate_proc(proc)
             raise TaskTimeoutError(
                 f"Command '{cmd_str}' timed out after {self.timeout:.2f}s."
             )
+        except BaseException:
+            # Kill process immediately if interrupted or cancelled
+            self._terminate_proc(proc)
+            raise
 
         duration = time.perf_counter() - start_time
         exit_code = proc.returncode
@@ -198,6 +201,15 @@ class ShellTask(Task):
             raise TaskExecutionError(err_msg)
 
         return shell_result
+
+    @staticmethod
+    def _terminate_proc(proc: subprocess.Popen) -> None:
+        """Safely terminate and reap a running subprocess."""
+        try:
+            proc.kill()
+            proc.communicate()
+        except Exception:
+            pass
 
     def _resolve_stdin(self, context: ExecutionContext) -> str | None:
         """Resolve input stream data from parameter or upstream task output."""
