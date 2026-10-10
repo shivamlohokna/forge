@@ -323,7 +323,7 @@ class TestGoldenUserJourneys:
             engine = Engine(verbose=False)
             res = engine.run(wf)
             assert res.is_success
-            assert str(res.get_task_result("consumer").output) == str(Path(tmp) / "consumer.txt")
+            assert Path(str(res.get_task_result("consumer").output)).resolve() == (Path(tmp) / "consumer.txt").resolve()
             content = (Path(tmp) / "consumer.txt").read_text()
             assert content == "CONSUMED: CUSTOM_DATA"
 
