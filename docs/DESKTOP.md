@@ -136,10 +136,10 @@ Desktop functionality is covered by headless unit and integration tests in `test
 
 Download the DMG for your chip:
 
-| Chip | File |
-|------|------|
-| Apple Silicon (M1/M2/M3) | `ForgeDesktop-0.3.0-macOS-arm64.dmg` |
-| Intel | `ForgeDesktop-0.3.0-macOS-x86_64-unsigned-preview.dmg` |
+| Chip | File / Method |
+|------|---------------|
+| Apple Silicon (M1/M2/M3/M4) | `ForgeDesktop-0.3.0-macOS-arm64.dmg` & `ForgeDesktop-0.3.0-macOS-arm64.app.zip` |
+| Intel (x86_64) | `pip install "forge[gui]"` (or run via Rosetta 2) |
 
 1. Open the `.dmg` and drag `ForgeDesktop.app` into `Applications`.
 2. Double-click to launch.
