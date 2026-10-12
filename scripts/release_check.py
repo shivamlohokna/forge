@@ -74,7 +74,8 @@ def main() -> int:
 
         # Step 4: Verify installed package version and CLI
         res = run_step("5. Verifying installed package --version", [str(forge_bin), "--version"])
-        assert "forge 0.2.0" in res.stdout
+        from forge import __version__
+        assert f"forge {__version__}" in res.stdout
 
         # Step 5: Execute Golden Path from clean directory
         with tempfile.TemporaryDirectory() as clean_user_dir:

@@ -23,7 +23,7 @@ ICON_ICNS  = str(FORGE_PKG / "resources" / "icons" / "forge.icns")
 
 # Resolve per-platform icon
 if sys.platform == "darwin":
-    _icon = ICON_ICNS if Path(ICON_ICNS).exists() else ICON_PNG
+    _icon = ICON_ICNS if Path(ICON_ICNS).exists() else None
 elif sys.platform == "win32":
     _icon = ICON_ICO
 else:

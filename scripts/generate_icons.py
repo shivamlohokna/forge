@@ -112,6 +112,14 @@ def generate_forge_icon(output_dir: Path) -> tuple[Path, Path]:
     img.save(str(png_path), "PNG")
     img.save(str(ico_path), "ICO")
 
+    icns_path = output_dir / "forge.icns"
+    try:
+        from PIL import Image as PILImage
+        pil_img = PILImage.open(png_path)
+        pil_img.save(icns_path, format="ICNS")
+    except Exception:
+        pass
+
     return ico_path, png_path
 
 
