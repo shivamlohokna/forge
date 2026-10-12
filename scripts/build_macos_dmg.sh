@@ -85,6 +85,9 @@ if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && -n "${APPLE_NOTARIZE_PROFILE:-}" ]]; t
   xcrun stapler staple "$DMG_PATH"
   echo "    Notarization complete."
 else
+  echo "    APPLE_NOTARIZE_PROFILE not set — skipping notarization."
+fi
+
 # Also package .app into .zip
 echo "==> Creating ZIP of .app bundle"
 (cd "$REPO_ROOT/dist" && zip -r -q -y "$INSTALLER_DIR/ForgeDesktop-${VERSION}-macOS-${ARCH}.app.zip" "ForgeDesktop.app")

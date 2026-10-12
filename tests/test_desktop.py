@@ -108,6 +108,14 @@ class TestDesktopMainWindow(unittest.TestCase):
         _app.setStyleSheet(MAIN_STYLESHEET)
         cls.window = ForgeMainWindow()
 
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "window") and cls.window is not None:
+            cls.window.deleteLater()
+            cls.window = None
+            if _app is not None:
+                _app.processEvents()
+
     def setUp(self):
         if not HAS_PYSIDE6:
             self.skipTest("PySide6 is not available in environment")
@@ -142,6 +150,13 @@ class TestDesktopEditorView(unittest.TestCase):
         if not HAS_PYSIDE6:
             self.skipTest("PySide6 is not available in environment")
         self.editor = WorkflowEditorView()
+
+    def tearDown(self):
+        if hasattr(self, "editor") and self.editor is not None:
+            self.editor.deleteLater()
+            self.editor = None
+            if _app is not None:
+                _app.processEvents()
 
     def test_set_workflow_populates_fields(self):
         wf = {
@@ -218,6 +233,9 @@ class TestDesktopHistoryView(unittest.TestCase):
                         return_value=Path(tmp) / "nonexistent.db"):
                 view = HistoryView()
                 self.assertIsNotNone(view)
+                view.deleteLater()
+                if _app is not None:
+                    _app.processEvents()
 
 
 class TestDesktopSettingsView(unittest.TestCase):
@@ -230,6 +248,9 @@ class TestDesktopSettingsView(unittest.TestCase):
     def test_creates_successfully(self):
         view = SettingsView()
         self.assertIsNotNone(view)
+        view.deleteLater()
+        if _app is not None:
+            _app.processEvents()
 
 
 class TestDesktopWorkflowExecution(unittest.TestCase):
@@ -284,6 +305,15 @@ class TestDesktopWorkflowExecution(unittest.TestCase):
             self.assertTrue((Path(tmp) / "output.txt").exists())
             content = (Path(tmp) / "output.txt").read_text()
             self.assertEqual(content, "Forge Desktop works!")
+
+            try:
+                runner.signals.sig_finished.disconnect()
+                runner.signals.sig_error.disconnect()
+            except Exception:
+                pass
+            runner.deleteLater()
+            if app is not None:
+                app.processEvents()
 
 
 if __name__ == "__main__":
