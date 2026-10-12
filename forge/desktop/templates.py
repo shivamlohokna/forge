@@ -1,9 +1,40 @@
-"""Built-in starter workflow templates for Forge Desktop."""
+"""Built-in starter workflow templates for Forge Desktop.
+
+Shell tasks that require a native shell interpreter are generated at import
+time based on the current platform so that the correct command is embedded
+when a user opens a template.  The task content can always be edited in the
+workflow editor before running.
+"""
 
 from __future__ import annotations
 
 import copy
+import sys
 from typing import Any
+
+
+def _shell_cmd(windows: str, posix: str) -> str:
+    """Return the platform-appropriate shell command string."""
+    return windows if sys.platform == "win32" else posix
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# System Health Audit — shell commands differ per platform
+# ─────────────────────────────────────────────────────────────────────────────
+_HEALTH_DISK_CMD = _shell_cmd(
+    windows='powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, Free, Used"',
+    posix="df -h",
+)
+_HEALTH_ENV_CMD = _shell_cmd(
+    windows='powershell -NoProfile -Command "Write-Output (\'Forge Host: \' + $env:COMPUTERNAME + \' User: \' + $env:USERNAME)"',
+    posix='echo "Forge Host: $(hostname)  User: $(whoami)"',
+)
+
+# Data Processing Pipeline — shell transform step
+_PIPELINE_TRANSFORM_CMD = _shell_cmd(
+    windows='powershell -NoProfile -Command "$c = Get-Content raw_input.csv; Write-Output (\'Processed \' + $c.Count + \' lines.\')"',
+    posix='awk \'END{print "Processed " NR " lines."}\' raw_input.csv',
+)
 
 STARTER_TEMPLATES: list[dict[str, Any]] = [
     {
@@ -12,6 +43,8 @@ STARTER_TEMPLATES: list[dict[str, Any]] = [
         "description": "Inspect disk usage and environment configuration with dependent shell tasks.",
         "icon": "desktop",
         "tags": ["Shell", "Monitoring", "DAG"],
+        # Note displayed in the Home view template card
+        "platform_note": "Shell commands are pre-filled for the current OS.",
         "workflow": {
             "name": "System Health Audit",
             "description": "Cross-task system inspection verifying file system and user context.",
@@ -24,7 +57,7 @@ STARTER_TEMPLATES: list[dict[str, Any]] = [
                     "timeout": 30.0,
                     "failure_strategy": "STOP",
                     "params": {
-                        "command": "powershell -NoProfile -Command \"Get-PSDrive -PSProvider FileSystem | Select-Object Name, Free, Used\"",
+                        "command": _HEALTH_DISK_CMD,
                     },
                 },
                 {
@@ -35,7 +68,7 @@ STARTER_TEMPLATES: list[dict[str, Any]] = [
                     "timeout": 15.0,
                     "failure_strategy": "STOP",
                     "params": {
-                        "command": "powershell -NoProfile -Command \"Write-Output ('Forge Host: ' + $env:COMPUTERNAME + ' User: ' + $env:USERNAME)\"",
+                        "command": _HEALTH_ENV_CMD,
                     },
                 },
             ],
@@ -145,7 +178,7 @@ STARTER_TEMPLATES: list[dict[str, Any]] = [
                     "timeout": 20.0,
                     "failure_strategy": "STOP",
                     "params": {
-                        "command": "powershell -NoProfile -Command \"$c = Get-Content raw_input.csv; Write-Output ('Processed ' + $c.Count + ' lines.')\"",
+                        "command": _PIPELINE_TRANSFORM_CMD,
                     },
                 },
                 {
@@ -157,7 +190,7 @@ STARTER_TEMPLATES: list[dict[str, Any]] = [
                     "params": {
                         "operation": "write",
                         "path": "pipeline_summary.json",
-                        "content": "{\"status\": \"COMPLETED\", \"pipeline\": \"Data Processing Pipeline\"}",
+                        "content": '{"status": "COMPLETED", "pipeline": "Data Processing Pipeline"}',
                     },
                 },
             ],
@@ -172,8 +205,9 @@ def get_starter_templates() -> list[dict[str, Any]]:
 
 
 def get_template_by_id(template_id: str) -> dict[str, Any] | None:
-    """Return a template by its ID."""
+    """Return a template by its ID, or None if not found."""
     for t in STARTER_TEMPLATES:
         if t["id"] == template_id:
             return copy.deepcopy(t)
     return None
+

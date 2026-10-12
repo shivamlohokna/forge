@@ -1,6 +1,9 @@
 # Forge Desktop Application Guide
 
-Forge Desktop provides a modern, native Windows graphical user interface for designing, inspecting, and running workflows without requiring terminal interaction.
+Forge Desktop provides a modern, native graphical user interface for designing,
+inspecting, and running workflows without requiring terminal interaction.
+It is available for **Windows**, **macOS**, and **Linux**.
+
 
 ---
 
@@ -95,30 +98,114 @@ In standalone distributions:
 
 ---
 
-## 5. Packaging & Windows Installer
+## 5. Platform Packaging & Installers
 
-Forge Desktop provides complete packaging assets:
+### 5.1. Windows — Inno Setup Installer
+- **`forge_desktop.spec`**: PyInstaller spec → `dist/ForgeDesktop/ForgeDesktop.exe` (directory bundle).
+- **`installer.iss`**: Inno Setup → `ForgeDesktop-0.3.0-Windows-x86_64-Setup.exe`.
+- Creates Start Menu and Desktop shortcuts.
+- Preserves `%APPDATA%\Forge` (user data) on uninstall.
+- CI job: `desktop-packaging` on `windows-latest`.
 
-1. **`forge_desktop.spec`**:
-   - PyInstaller spec configured for `ForgeDesktop.exe`.
-   - Bundles all Forge modules, declarative templates, package data, and Windows icons (`forge.ico`).
-   - Generates a standalone directory bundle in `dist/ForgeDesktop/`.
+### 5.2. macOS — .app Bundle + .dmg
+- **`forge_desktop.spec`**: Produces `dist/ForgeDesktop.app` via `BUNDLE()` with full `Info.plist` metadata.
+- **`scripts/build_macos_dmg.sh`**: Wraps the `.app` into a `.dmg` using `hdiutil create`.
+- Optional `codesign` + `xcrun notarytool` support via GitHub Secrets (see Section 8).
+- Unsigned builds are labelled `-unsigned-preview` and will trigger Gatekeeper.
+- CI job: `desktop-macos` matrix — `macos-14` (arm64) + `macos-13` (x86_64).
 
-2. **`installer.iss`**:
-   - Inno Setup compilation script.
-   - Packages `dist/ForgeDesktop/*` into a single standalone setup executable `ForgeDesktop-0.2.0-Setup.exe`.
-   - Creates Start Menu and Desktop shortcuts.
-   - Preserves user data in `%APPDATA%\Forge` on uninstall.
-
-3. **Automated CI Integration**:
-   - GitHub Actions workflow `.github/workflows/ci.yml` includes the `desktop-packaging` job on `windows-latest`.
-   - Builds the standalone bundle, compiles the installer with Inno Setup compiler (`iscc.exe`), and uploads the setup executable artifact.
+### 5.3. Linux — AppImage
+- **`forge_desktop.spec`**: Produces `dist/ForgeDesktop/` (directory bundle) via `COLLECT()`.
+- **`scripts/build_linux_appimage.sh`**: Creates an AppDir layout and invokes `appimagetool`.
+- No Python or pip required to run the AppImage.
+- CI job: `desktop-linux` on `ubuntu-22.04` (glibc 2.35).
 
 ---
 
 ## 6. Testing Strategy
 
 Desktop functionality is covered by headless unit and integration tests in `tests/test_desktop.py`:
-- Configured with `-platform offscreen` to run reliably in CI without displays.
-- Tests window construction, template loading, editor validation, file saving, history loading, and background execution.
-- Includes dynamic import guards so tests skip gracefully if PySide6 is not present in non-GUI test environments.
+- Configured with `-platform offscreen` / `QT_QPA_PLATFORM=offscreen` to run in CI without displays.
+- Tests: window construction, template loading, editor validation, file saving, history loading, and background workflow execution.
+- Includes dynamic import guards so tests skip gracefully if PySide6 is not present.
+- The full suite runs as part of every desktop CI job on **all three platforms**.
+
+---
+
+## 7. macOS Installation
+
+Download the DMG for your chip:
+
+| Chip | File |
+|------|------|
+| Apple Silicon (M1/M2/M3) | `ForgeDesktop-0.3.0-macOS-arm64.dmg` |
+| Intel | `ForgeDesktop-0.3.0-macOS-x86_64-unsigned-preview.dmg` |
+
+1. Open the `.dmg` and drag `ForgeDesktop.app` into `Applications`.
+2. Double-click to launch.
+
+> **Gatekeeper (unsigned builds)**: Right-click → Open → Open, or run:
+> ```bash
+> xattr -d com.apple.quarantine /Applications/ForgeDesktop.app
+> ```
+
+Minimum macOS version: **12.0 (Monterey)**.
+
+---
+
+## 8. Linux Installation
+
+Download: `ForgeDesktop-0.3.0-Linux-x86_64.AppImage`
+
+```bash
+chmod +x ForgeDesktop-0.3.0-Linux-x86_64.AppImage
+./ForgeDesktop-0.3.0-Linux-x86_64.AppImage
+```
+
+**Required host libraries** (not bundled in the AppImage):
+
+```bash
+# Ubuntu / Debian
+sudo apt-get install libgl1 libglib2.0-0 libxcb1 libxcb-cursor0 \
+  libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxkbcommon0 \
+  libxkbcommon-x11-0 libegl1 libdbus-1-3 libfuse2
+```
+
+**Known limitations**: glibc ≥ 2.35 required; Wayland untested; unsigned binary.
+
+---
+
+## 9. Apple Developer Signing (Optional CI Secrets)
+
+| Secret | Description |
+|--------|-------------|
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Acme Corp (XXXXXXXXXX)` |
+| `APPLE_NOTARIZE_PROFILE` | Keychain profile from `xcrun notarytool store-credentials` |
+
+When set, CI signs the `.app`, notarizes the `.dmg`, and staples the ticket.
+Credentials are **never logged or exposed** in CI output.
+
+---
+
+## 10. CI Artifact Summary
+
+| Job | Runner | Artifact | Format |
+|-----|--------|----------|--------|
+| `desktop-packaging` | `windows-latest` | `forge-desktop-windows-x86_64` | `.exe` |
+| `desktop-macos` (arm64) | `macos-14` | `forge-desktop-macos-arm64` | `.dmg` |
+| `desktop-macos` (x86_64) | `macos-13` | `forge-desktop-macos-x86_64` | `.dmg` |
+| `desktop-linux` | `ubuntu-22.04` | `forge-desktop-linux-x86_64` | `.AppImage` |
+
+---
+
+## 11. Roadmap
+
+| Item | Status |
+|------|--------|
+| Windows Inno Setup installer | ✅ v0.2.0 |
+| macOS .app + .dmg (arm64 + x86_64) | ✅ v0.3.0 |
+| Linux x86_64 AppImage | ✅ v0.3.0 |
+| macOS Developer ID signing + notarization | 🔲 Requires Apple Developer credentials |
+| Linux aarch64 AppImage | 🔲 Future |
+| Wayland-native support | 🔲 Future |
+| Auto-update mechanism | 🔲 Future |

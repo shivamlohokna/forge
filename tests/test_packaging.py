@@ -38,7 +38,7 @@ def test_pyproject_metadata():
 
     project = data.get("project", {})
     assert project.get("name") == "forge"
-    assert project.get("version") == "0.2.0"
+    assert project.get("version") == "0.3.0"
     assert project.get("description") == "Serious Python Workflow Automation and Execution Platform"
     assert project.get("requires-python") == ">=3.11"
     assert project.get("license") == "Apache-2.0"

@@ -100,7 +100,7 @@ class ForgeMainWindow(QWidget):
         sidebar_layout.addStretch()
 
         # Version badge at bottom of sidebar
-        version_lbl = QLabel("v0.2.0")
+        version_lbl = QLabel("v0.3.0")
         version_lbl.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px; padding: 4px;")
         sidebar_layout.addWidget(version_lbl)
 

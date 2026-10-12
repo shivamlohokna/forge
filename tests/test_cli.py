@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 import pytest
 
-from forge import FunctionTask, Workflow
+from forge import FunctionTask, Workflow, __version__
 from forge.cli import (
     history_command,
     inspect_command,
@@ -503,7 +503,7 @@ class TestMainEntrypoint:
             main(["--version"])
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "forge 0.2.0" in captured.out
+        assert f"forge {__version__}" in captured.out
 
     def test_main_validate_success(self, valid_workflow_file: Path):
         code = main(["validate", str(valid_workflow_file)])
@@ -573,7 +573,7 @@ class TestSubprocessCLI:
             text=True,
         )
         assert proc.returncode == 0
-        assert "forge 0.2.0" in proc.stdout
+        assert f"forge {__version__}" in proc.stdout
 
     def test_python_module_help(self):
         proc = subprocess.run(

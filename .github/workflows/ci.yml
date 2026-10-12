@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -10,6 +11,9 @@ permissions:
   contents: read
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Cross-platform engine & library tests (unchanged)
+  # ─────────────────────────────────────────────────────────────────────────────
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
@@ -39,6 +43,9 @@ jobs:
       - name: Run test suite
         run: python -m pytest --tb=short
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wheel build & golden-path validation (unchanged)
+  # ─────────────────────────────────────────────────────────────────────────────
   package-build:
     name: Package Build & Golden Path Validation
     runs-on: ubuntu-latest
@@ -77,8 +84,11 @@ jobs:
           name: forge-wheel
           path: dist/*.whl
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Windows Desktop — Inno Setup installer  (preserved, logic unchanged)
+  # ─────────────────────────────────────────────────────────────────────────────
   desktop-packaging:
-    name: Windows Desktop Packaging & Installer
+    name: Windows Desktop — Installer (x86_64)
     runs-on: windows-latest
     needs: test
 
@@ -114,10 +124,147 @@ jobs:
           $iscc = if (Get-Command iscc.exe -ErrorAction SilentlyContinue) { (Get-Command iscc.exe).Source } elseif (Test-Path "C:\Program Files (x86)\Inno Setup 6\iscc.exe") { "C:\Program Files (x86)\Inno Setup 6\iscc.exe" } else { "C:\Program Files\Inno Setup 6\iscc.exe" }
           & $iscc installer.iss
 
-      - name: Upload desktop installer artifact
+      - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: forge-desktop-installer
+          name: forge-desktop-windows-x86_64
           path: dist/installer/*.exe
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # macOS Desktop — .app bundle packaged as .dmg  (arm64 + x86_64)
+  # ─────────────────────────────────────────────────────────────────────────────
+  desktop-macos:
+    name: macOS Desktop — DMG (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon — native macos-14 runner
+          - arch: arm64
+            runner: macos-14
+          # Intel — native macos-13 runner
+          - arch: x86_64
+            runner: macos-13
 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[gui]" pyinstaller pytest pytest-asyncio
+
+      - name: Run desktop test suite (offscreen platform)
+        run: python -m pytest tests/test_desktop.py -v
+
+      - name: Build .app bundle
+        run: pyinstaller --noconfirm forge_desktop.spec
+
+      - name: Verify .app bundle was produced
+        run: |
+          test -d dist/ForgeDesktop.app || { echo "ERROR: ForgeDesktop.app not found"; exit 1; }
+          echo "App bundle MacOS directory:"
+          ls dist/ForgeDesktop.app/Contents/MacOS/
+
+      - name: Package .app into .dmg
+        # APPLE_SIGNING_IDENTITY / APPLE_NOTARIZE_PROFILE are optional GitHub Secrets.
+        # When absent, the script performs ad-hoc signing and labels the DMG
+        # "unsigned-preview" — functional but will trigger macOS Gatekeeper warnings.
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_NOTARIZE_PROFILE: ${{ secrets.APPLE_NOTARIZE_PROFILE || '' }}
+        run: bash scripts/build_macos_dmg.sh "0.3.0"
+
+      - name: List installer output
+        run: ls -lh dist/installer/
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-desktop-macos-${{ matrix.arch }}
+          path: dist/installer/*.dmg
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Linux Desktop — portable AppImage (x86_64)
+  # ─────────────────────────────────────────────────────────────────────────────
+  desktop-linux:
+    name: Linux Desktop — AppImage (x86_64)
+    # Pin to ubuntu-22.04 for widest glibc compatibility (glibc 2.35).
+    # An AppImage built on a newer distro will not run on older glibc hosts.
+    runs-on: ubuntu-22.04
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install system Qt / xcb / display dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 \
+            libglib2.0-0 \
+            libxcb1 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xfixes0 \
+            libxcb-xkb1 \
+            libxkbcommon0 \
+            libxkbcommon-x11-0 \
+            libegl1 \
+            libdbus-1-3 \
+            libfuse2 \
+            fuse
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[gui]" pyinstaller pytest pytest-asyncio
+
+      - name: Run desktop test suite (offscreen platform)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest tests/test_desktop.py -v
+
+      - name: Build directory bundle
+        run: pyinstaller --noconfirm forge_desktop.spec
+
+      - name: Verify bundle was produced
+        run: |
+          test -d dist/ForgeDesktop || { echo "ERROR: dist/ForgeDesktop bundle not found"; exit 1; }
+          test -f dist/ForgeDesktop/ForgeDesktop || { echo "ERROR: ForgeDesktop executable missing"; exit 1; }
+          echo "Bundle size: $(du -sh dist/ForgeDesktop | cut -f1)"
+
+      - name: Build AppImage
+        run: bash scripts/build_linux_appimage.sh "0.3.0"
+
+      - name: Verify AppImage header
+        run: |
+          ls -lh dist/installer/*.AppImage
+          file dist/installer/*.AppImage
+
+      - name: Upload Linux AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-desktop-linux-x86_64
+          path: dist/installer/*.AppImage
