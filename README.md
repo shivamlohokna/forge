@@ -85,13 +85,40 @@ You can define workflows declaratively (**JSON**, **TOML**, or **YAML**) or prog
 
 ### 1. Installation
 
-Install Forge via `pip`:
+> [!IMPORTANT]
+> **PyPI Notice**: The package name `forge` on PyPI belongs to an unrelated Django framework. Do not run `pip install forge`. Install Forge from repository source or from the verified release wheel as detailed below.
 
+#### Option A: Install from Source (Recommended)
+Requires Python 3.11 or newer:
 ```bash
-pip install forge
+git clone https://github.com/shivamlohokna/forge.git
+cd forge
+python -m venv .venv
+
+# Activate the virtual environment:
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# macOS / Linux:
+source .venv/bin/activate
+
+# Install Forge CLI & Core Engine:
+python -m pip install .
+
+# Or install with the Desktop GUI extra:
+python -m pip install ".[gui]"
 ```
 
-*(Requires Python 3.11 or newer)*
+#### Option B: Install from Downloaded Wheel
+Download the verified wheel from the [v0.3.0 Release](https://github.com/shivamlohokna/forge/releases/tag/v0.3.0):
+```bash
+python -m pip install https://github.com/shivamlohokna/forge/releases/download/v0.3.0/forge-0.3.0-py3-none-any.whl
+
+# To include desktop GUI dependencies:
+python -m pip install "PySide6>=6.5.0"
+```
+
+#### Option C: Standalone Desktop Application (Zero Python Install)
+If you prefer a standalone desktop application without managing a Python environment, download a prebuilt binary from the [Forge Desktop Application](#forge-desktop-application) section below.
 
 ### 2. Initialize a Project
 
@@ -317,27 +344,47 @@ Once installed, plugin task types are automatically discovered and can be used d
 
 ## Forge Desktop Application
 
-Forge provides a native Windows graphical application:
+Forge Desktop provides a native graphical application for **Windows**, **macOS (Apple Silicon)**, and **Linux**:
 - **Visual Workflow Editor**: Interactive task creation, dependency wiring, and instant validation.
 - **Starter Templates**: 1-click templates for System Health Audits, File Backup Pipelines, and REST API Monitors.
 - **Live DAG Execution Visualizer**: Real-time task progress tracking, live duration timer, and output inspection.
 - **Durable History Browser**: Explore past executions, filter by status, and inspect per-task metadata.
 - **Settings & Defaults**: Configure default concurrency and local storage paths.
 
-### Launching the GUI
+### Standalone Desktop Installers (Zero Python Install)
 
-With Python and GUI dependencies installed:
+Prebuilt standalone binaries are available from the [**Forge v0.3.0 Release**](https://github.com/shivamlohokna/forge/releases/tag/v0.3.0):
+
+- **Windows (x86_64)**: [**`ForgeDesktop-0.3.0-Windows-x86_64-Setup.exe`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-Windows-x86_64-Setup.exe) (36.8 MB)  
+  Setup wizard creating Start Menu and Desktop shortcuts. Silent install: `/VERYSILENT /NORESTART`.
+- **macOS (Apple Silicon ARM64 only — M1/M2/M3/M4)**:  
+  - [**`ForgeDesktop-0.3.0-macOS-arm64.dmg`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.dmg) (45.7 MB)
+  - [**`ForgeDesktop-0.3.0-macOS-arm64.app.zip`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.app.zip) (40.2 MB)  
+  *Drag to `/Applications` and launch. Requires macOS 12.0 (Monterey) or newer.*  
+  > **macOS Architecture Notice**: Prebuilt macOS binaries are **Apple Silicon (`arm64`) only**. Native Intel Mac (`x86_64`) prebuilt binaries are not currently included in the published release (Apple's Rosetta 2 only translates x86_64 binaries to run on ARM64 hardware; it cannot run ARM64 binaries on Intel Macs). Intel Mac users can install and run Forge from source via Python.
+- **Linux (x86_64)**: [**`ForgeDesktop-0.3.0-Linux-x86_64.AppImage`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-Linux-x86_64.AppImage) (85.2 MB)  
+  Self-contained portable AppImage for Linux distributions with glibc ≥ 2.35 (e.g., Ubuntu 22.04+). Run `chmod +x` and execute directly. Requires FUSE (`libfuse2`).
+
+### Running Forge Desktop from Source
+
+If you have Python 3.11+ installed:
 ```bash
-pip install "forge[gui]"
+git clone https://github.com/shivamlohokna/forge.git
+cd forge
+python -m venv .venv
+
+# Activate the virtual environment:
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# macOS / Linux:
+source .venv/bin/activate
+
+# Install Forge with GUI dependencies:
+python -m pip install ".[gui]"
+
+# Launch the desktop interface:
 forge-gui
 ```
-
-### Standalone Windows Installer
-
-Forge Desktop is packaged into a standalone Windows installer using PyInstaller and Inno Setup, enabling zero-install, double-click execution with no external Python runtime required.
-
-- 📥 **Download:** [**ForgeDesktop-0.2.0-Setup.exe**](https://github.com/shivamlohokna/forge/releases/download/v0.2.0/ForgeDesktop-0.2.0-Setup.exe) (Windows 64-bit Installer)
-- 📋 **Release Details & Notes:** [Forge v0.2.0 Release](https://github.com/shivamlohokna/forge/releases/tag/v0.2.0)
 
 ---
 

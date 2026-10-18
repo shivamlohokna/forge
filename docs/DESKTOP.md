@@ -85,16 +85,27 @@ Forge Desktop provides a sidebar navigation shell with five core view tabs:
 ## 4. Launching Forge Desktop
 
 ### From Python (with GUI extras)
+> [!NOTE]
+> The `forge` package on PyPI is an unrelated Django project. Do not use `pip install forge`. Install from this repository's source with the GUI extra:
+
 ```bash
-pip install "forge[gui]"
+git clone https://github.com/shivamlohokna/forge.git
+cd forge
+python -m venv .venv
+
+# Activate:
+#   Windows (PowerShell): .venv\Scripts\Activate.ps1
+#   macOS / Linux: source .venv/bin/activate
+
+python -m pip install ".[gui]"
 forge-gui
 ```
 
-### Standalone Windows Executable
+### Standalone Executable
 In standalone distributions:
-```powershell
-.\dist\ForgeDesktop\ForgeDesktop.exe
-```
+- **Windows**: `dist\ForgeDesktop\ForgeDesktop.exe` (or via Setup installer)
+- **macOS**: `dist/ForgeDesktop.app` (or via DMG)
+- **Linux**: `dist/installer/ForgeDesktop-0.3.0-Linux-x86_64.AppImage`
 
 ---
 
@@ -110,9 +121,9 @@ In standalone distributions:
 ### 5.2. macOS — .app Bundle + .dmg
 - **`forge_desktop.spec`**: Produces `dist/ForgeDesktop.app` via `BUNDLE()` with full `Info.plist` metadata.
 - **`scripts/build_macos_dmg.sh`**: Wraps the `.app` into a `.dmg` using `hdiutil create`.
-- Optional `codesign` + `xcrun notarytool` support via GitHub Secrets (see Section 8).
+- Optional `codesign` + `xcrun notarytool` support via GitHub Secrets (see Section 9).
 - Unsigned builds are labelled `-unsigned-preview` and will trigger Gatekeeper.
-- CI job: `desktop-macos` matrix — `macos-14` (arm64) + `macos-13` (x86_64).
+- CI job: `desktop-macos` runs on native `macos-14` (Apple Silicon arm64). GitHub-hosted Intel macOS runners (`macos-12` and `macos-13`) have been retired by GitHub Actions; native Intel x86_64 desktop packages are not currently built in CI.
 
 ### 5.3. Linux — AppImage
 - **`forge_desktop.spec`**: Produces `dist/ForgeDesktop/` (directory bundle) via `COLLECT()`.
@@ -134,14 +145,17 @@ Desktop functionality is covered by headless unit and integration tests in `test
 
 ## 7. macOS Installation
 
-Download the DMG for your chip:
+Download the package for your architecture:
 
-| Chip | File / Method |
-|------|---------------|
-| Apple Silicon (M1/M2/M3/M4) | `ForgeDesktop-0.3.0-macOS-arm64.dmg` & `ForgeDesktop-0.3.0-macOS-arm64.app.zip` |
-| Intel (x86_64) | `pip install "forge[gui]"` (or run via Rosetta 2) |
+| Architecture | Package / Installation Method |
+|--------------|------------------------------|
+| **Apple Silicon (M1/M2/M3/M4)** | [**`ForgeDesktop-0.3.0-macOS-arm64.dmg`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.dmg) & [**`ForgeDesktop-0.3.0-macOS-arm64.app.zip`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.app.zip) |
+| **Intel (x86_64)** | *Prebuilt standalone binary not available.* Install from repository source via Python 3.11+: `git clone https://github.com/shivamlohokna/forge.git && cd forge && pip install ".[gui]"` |
 
-1. Open the `.dmg` and drag `ForgeDesktop.app` into `Applications`.
+> [!IMPORTANT]
+> **Architecture & Rosetta Notice**: Prebuilt macOS desktop binaries are exclusively built for **Apple Silicon (`arm64`)**. Apple's Rosetta 2 translation environment only runs x86_64 binaries on Apple Silicon hardware; it **cannot** translate or run ARM64 binaries on Intel Macs. Do not attempt to run the ARM64 DMG on Intel hardware. Intel Mac users should run Forge from source.
+
+1. Open `ForgeDesktop-0.3.0-macOS-arm64.dmg` and drag `ForgeDesktop.app` into `/Applications`.
 2. Double-click to launch.
 
 > **Gatekeeper (unsigned builds)**: Right-click → Open → Open, or run:
@@ -155,7 +169,7 @@ Minimum macOS version: **12.0 (Monterey)**.
 
 ## 8. Linux Installation
 
-Download: `ForgeDesktop-0.3.0-Linux-x86_64.AppImage`
+Download: [**`ForgeDesktop-0.3.0-Linux-x86_64.AppImage`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-Linux-x86_64.AppImage)
 
 ```bash
 chmod +x ForgeDesktop-0.3.0-Linux-x86_64.AppImage
@@ -192,8 +206,7 @@ Credentials are **never logged or exposed** in CI output.
 | Job | Runner | Artifact | Format |
 |-----|--------|----------|--------|
 | `desktop-packaging` | `windows-latest` | `forge-desktop-windows-x86_64` | `.exe` |
-| `desktop-macos` (arm64) | `macos-14` | `forge-desktop-macos-arm64` | `.dmg` |
-| `desktop-macos` (x86_64) | `macos-13` | `forge-desktop-macos-x86_64` | `.dmg` |
+| `desktop-macos` (arm64) | `macos-14` | `forge-desktop-macos-arm64` | `.dmg`, `.zip` |
 | `desktop-linux` | `ubuntu-22.04` | `forge-desktop-linux-x86_64` | `.AppImage` |
 
 ---
@@ -203,8 +216,9 @@ Credentials are **never logged or exposed** in CI output.
 | Item | Status |
 |------|--------|
 | Windows Inno Setup installer | ✅ v0.2.0 |
-| macOS .app + .dmg (arm64 + x86_64) | ✅ v0.3.0 |
+| macOS .app + .dmg (Apple Silicon arm64) | ✅ v0.3.0 |
 | Linux x86_64 AppImage | ✅ v0.3.0 |
+| macOS Intel (x86_64) native desktop bundle | 🔲 Requires supported Intel build infrastructure |
 | macOS Developer ID signing + notarization | 🔲 Requires Apple Developer credentials |
 | Linux aarch64 AppImage | 🔲 Future |
 | Wayland-native support | 🔲 Future |

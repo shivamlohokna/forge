@@ -19,16 +19,16 @@ all existing v0.2.0 functionality and the current Windows installer.
   - Unified PyInstaller spec (`forge_desktop.spec`) now produces a proper
     `.app` bundle on macOS via `BUNDLE()` with full `Info.plist` metadata
     (`CFBundleIdentifier`, `NSHighResolutionCapable`, `LSMinimumSystemVersion`).
-  - Separate CI builds for **arm64** (Apple Silicon, `macos-14`) and
-    **x86_64** (Intel, `macos-13`) — no cross-compilation.
+  - Native CI build for **arm64** (Apple Silicon, `macos-14`). Native
+    Intel x86_64 standalone binaries are not published following GitHub's
+    retirement of hosted Intel runners.
   - `scripts/build_macos_dmg.sh`: packages the `.app` into a `.dmg` with
     an Applications symlink via `hdiutil`.
   - Optional Developer ID code signing (`APPLE_SIGNING_IDENTITY` secret)
     and notarization (`APPLE_NOTARIZE_PROFILE` secret). Builds without
     secrets are ad-hoc signed and labelled `unsigned-preview`.
-  - Artifact names encode OS and arch:
-    `ForgeDesktop-0.3.0-macOS-arm64.dmg`,
-    `ForgeDesktop-0.3.0-macOS-x86_64-unsigned-preview.dmg`.
+  - Artifact names: `ForgeDesktop-0.3.0-macOS-arm64.dmg` and
+    `ForgeDesktop-0.3.0-macOS-arm64.app.zip`.
 - **Linux Distribution**:
   - PyInstaller `COLLECT()` directory bundle built on `ubuntu-22.04`
     (glibc 2.35) for broad compatibility.
@@ -47,7 +47,7 @@ all existing v0.2.0 functionality and the current Windows installer.
     `data_processing_pipeline`) now emit `df -h` / `echo` commands on
     macOS/Linux instead of PowerShell, selected at import time.
 - **CI Extensions** (`.github/workflows/ci.yml`):
-  - `desktop-macos` job: matrix of arm64 + x86_64, tests + DMG packaging.
+  - `desktop-macos` job: native macos-14 Apple Silicon runner, tests + DMG packaging.
   - `desktop-linux` job: ubuntu-22.04, installs xcb/libfuse2 system deps,
     runs offscreen tests, builds AppImage.
   - `v*` tag trigger added so packaging jobs fire on release tags.
