@@ -261,6 +261,7 @@ class TestSanitizerAtPersistenceBoundary:
 
         rec = store.get_task_run("sanitize-task-001")
         assert rec is not None
+        assert rec.output is not None
         import json
         stored_output = json.loads(rec.output)
         # Secret is masked in DB record
@@ -293,6 +294,7 @@ class TestSanitizerAtPersistenceBoundary:
 
         rec = store.get_task_run("safe-task-001")
         assert rec is not None
+        assert rec.output is not None
         import json
         stored_output = json.loads(rec.output)
         assert stored_output["lines"] == 42

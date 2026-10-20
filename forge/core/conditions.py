@@ -254,7 +254,11 @@ class _SafeASTEvaluator:
         return tuple(self.evaluate(elt) for elt in node.elts)
 
     def _eval_Dict(self, node: ast.Dict) -> dict[Any, Any]:
-        return {self.evaluate(k): self.evaluate(v) for k, v in zip(node.keys, node.values)}
+        return {
+            self.evaluate(k): self.evaluate(v)
+            for k, v in zip(node.keys, node.values)
+            if k is not None
+        }
 
 
 def validate_condition_syntax(condition: str) -> None:
@@ -304,7 +308,7 @@ def evaluate_condition(
     # 3. Callable custom condition
     if callable(condition):
         try:
-            result = bool(condition(context))
+            result = condition(context)
             if result:
                 return True, ""
             return False, f"Custom condition callable returned False"

@@ -6,6 +6,7 @@ import unittest
 
 from forge import (
     Engine,
+    EngineHook,
     EventType,
     ExecutionContext,
     FunctionTask,
@@ -92,7 +93,7 @@ class TestConcurrencyAndInfrastructure(unittest.TestCase):
         engine = Engine(verbose=False)
 
         # Hook to trigger cancellation as soon as task 1 finishes
-        class CancelHook:
+        class CancelHook(EngineHook):
             def on_task_success(self, task, output):
                 engine.cancel()
 

@@ -47,3 +47,6 @@ forge = [
 [tool.pytest.ini_options]
 addopts = "--capture=sys"
 
+[tool.pyright]
+extraPaths = ["forge-github"]
+

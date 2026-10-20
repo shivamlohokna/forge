@@ -304,6 +304,20 @@ class Task(ABC):
             return other
         return NotImplemented
 
+    # Reverse operator support: [task_a, task_b] >> task_c
+    def __rrshift__(self, other: Task | list[Task]) -> Task:
+        """Reverse right shift: called when left operand is a list, e.g. [A, B] >> C."""
+        if isinstance(other, list):
+            for item in other:
+                if not isinstance(item, Task):
+                    raise TypeError("All items in dependency list must be Task instances.")
+                self.add_dependency(item)
+            return self
+        elif isinstance(other, Task):
+            self.add_dependency(other)
+            return self
+        return NotImplemented
+
     # Operator support: task_b << task_a (task_b depends on task_a)
     def __lshift__(self, other: Task | list[Task]) -> Task:
         """Bitwise left shift operator: B << A means B depends on A."""

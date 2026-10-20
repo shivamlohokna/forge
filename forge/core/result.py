@@ -192,14 +192,14 @@ class WorkflowResult:
         """Register a completed task result."""
         self.task_results[result.task_id] = result
 
-    def get_task_result(self, task_id_or_name: str) -> TaskResult | None:
+    def get_task_result(self, task_id_or_name: str) -> TaskResult:
         """Look up a task result by either task_id or task_name."""
         if task_id_or_name in self.task_results:
             return self.task_results[task_id_or_name]
         for result in self.task_results.values():
             if result.task_name == task_id_or_name:
                 return result
-        return None
+        return None  # type: ignore[return-value]
 
     def finish(self, status: WorkflowStatus) -> None:
         """Mark the workflow run as finished and compute total duration."""

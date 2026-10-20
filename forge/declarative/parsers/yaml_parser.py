@@ -11,7 +11,7 @@ from forge.exceptions import WorkflowSpecError
 
 YAML_AVAILABLE = False
 try:
-    import yaml
+    import yaml  # type: ignore[import-untyped, import-not-found]
     YAML_AVAILABLE = True
 except ImportError:
     yaml = None  # type: ignore[assignment]

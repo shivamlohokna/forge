@@ -32,3 +32,6 @@ include = ["forge_github", "forge_github.*"]
 
 [tool.setuptools.package-data]
 forge_github = ["py.typed"]
+
+[tool.pyright]
+extraPaths = [".."]

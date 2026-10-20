@@ -177,8 +177,8 @@ jobs:
         # When absent, the script performs ad-hoc signing and labels the DMG
         # "unsigned-preview" — functional but will trigger macOS Gatekeeper warnings.
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_NOTARIZE_PROFILE: ${{ secrets.APPLE_NOTARIZE_PROFILE || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets['APPLE_SIGNING_IDENTITY'] }}
+          APPLE_NOTARIZE_PROFILE: ${{ secrets['APPLE_NOTARIZE_PROFILE'] }}
         run: bash scripts/build_macos_dmg.sh "0.3.0"
 
       - name: List installer output

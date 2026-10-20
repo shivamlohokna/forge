@@ -97,14 +97,14 @@ class Workflow:
             self.add_task(t, auto_add_dependencies=auto_add_dependencies)
         return self
 
-    def get_task(self, task_id_or_name: str) -> Task | None:
+    def get_task(self, task_id_or_name: str) -> Task:
         """Look up a registered task by its task_id or task name."""
         if task_id_or_name in self._tasks:
             return self._tasks[task_id_or_name]
         for task in self._tasks.values():
             if task.name == task_id_or_name:
                 return task
-        return None
+        return None  # type: ignore[return-value]
 
     def has_task(self, task_id_or_name: str) -> bool:
         """Return True if a task with the given task_id or name exists in the workflow."""

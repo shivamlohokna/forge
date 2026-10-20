@@ -17,13 +17,14 @@ block_cipher = None
 
 REPO_ROOT = Path(SPECPATH)
 FORGE_PKG  = REPO_ROOT / "forge"
-ICON_ICO   = str(FORGE_PKG / "resources" / "icons" / "forge.ico")
-ICON_PNG   = str(FORGE_PKG / "resources" / "icons" / "forge.png")
-ICON_ICNS  = str(FORGE_PKG / "resources" / "icons" / "forge.icns")
+ASSETS_DIR = REPO_ROOT / "assets"
+ICON_ICO   = str(ASSETS_DIR / "forge_icon.ico")
+ICON_PNG   = str(ASSETS_DIR / "forge_icon.png")
+ICON_ICNS  = str(ASSETS_DIR / "forge_icon.icns")
 
 # Resolve per-platform icon
 if sys.platform == "darwin":
-    _icon = ICON_ICNS if Path(ICON_ICNS).exists() else None
+    _icon = ICON_ICNS if Path(ICON_ICNS).exists() else ICON_PNG
 elif sys.platform == "win32":
     _icon = ICON_ICO
 else:

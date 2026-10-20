@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import urllib.error
+from email.message import Message
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -217,7 +218,7 @@ def test_github_api_error_mapping(http_code: int, expected_err_message: str):
         url="https://api.github.com/repos/owner/repo/issues",
         code=http_code,
         msg="HTTP Error",
-        hdrs={},
+        hdrs=Message(),
         fp=error_fp,
     )
 

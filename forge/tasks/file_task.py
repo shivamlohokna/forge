@@ -291,7 +291,8 @@ class FileTask(Task):
             if self.binary:
                 temp_file.write_bytes(payload if isinstance(payload, bytes) else payload.encode(self.encoding))
             else:
-                temp_file.write_text(payload, encoding=self.encoding)
+                text_content = payload.decode(self.encoding) if isinstance(payload, bytes) else str(payload)
+                temp_file.write_text(text_content, encoding=self.encoding)
 
             temp_file.replace(self.destination)
         finally:

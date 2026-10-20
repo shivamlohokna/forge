@@ -21,7 +21,7 @@ from forge.core.conditions import (
     validate_condition_syntax,
 )
 from forge.core.engine import Engine
-from forge.core.result import WorkflowStatus
+from forge.core.result import TaskResult, WorkflowResult, WorkflowStatus
 from forge.core.task import (
     ExecutionContext,
     FailureStrategy,
@@ -35,6 +35,12 @@ from forge.exceptions import WorkflowSpecError
 from forge.tasks.file_task import FileTask
 from forge.tasks.function_task import FunctionTask
 from forge.tasks.shell_task import ShellTask
+
+
+def _task_res(res: WorkflowResult, task_id_or_name: str) -> TaskResult:
+    result = res.get_task_result(task_id_or_name)
+    assert result is not None, f"Task '{task_id_or_name}' result should not be None"
+    return result
 
 
 # =========================================================================== #
@@ -155,8 +161,8 @@ class TestTriggerRules:
         engine = Engine(verbose=False)
         res = engine.run(wf)
         assert res.status == WorkflowStatus.SUCCESS
-        assert res.get_task_result("T1").is_skipped
-        assert res.get_task_result("T2").is_skipped
+        assert _task_res(res, "T1").is_skipped
+        assert _task_res(res, "T2").is_skipped
 
     def test_all_done_runs_after_failure(self):
         """Under ALL_DONE: cleanup task executes even when upstream fails."""
@@ -178,8 +184,8 @@ class TestTriggerRules:
         engine = Engine(verbose=False)
         res = engine.run(wf)
 
-        assert res.get_task_result("FailTask").is_failed
-        assert res.get_task_result("CleanupTask").is_success
+        assert _task_res(res, "FailTask").is_failed
+        assert _task_res(res, "CleanupTask").is_success
         assert len(cleanup_ran) == 1
 
     def test_all_done_runs_after_skipped_branch(self):
@@ -193,8 +199,8 @@ class TestTriggerRules:
         engine = Engine(verbose=False)
         res = engine.run(wf)
         assert res.status == WorkflowStatus.SUCCESS
-        assert res.get_task_result("SkipTask").is_skipped
-        assert res.get_task_result("Cleanup").is_success
+        assert _task_res(res, "SkipTask").is_skipped
+        assert _task_res(res, "Cleanup").is_success
 
     def test_none_failed_allows_skipped_dependency(self):
         """Under NONE_FAILED: succeeds when upstream is SUCCESS or SKIPPED."""
@@ -209,14 +215,17 @@ class TestTriggerRules:
         engine = Engine(verbose=False)
         res = engine.run(wf)
         assert res.status == WorkflowStatus.SUCCESS
-        assert res.get_task_result("T1").is_success
-        assert res.get_task_result("T2").is_skipped
-        assert res.get_task_result("T3").is_success
+        assert _task_res(res, "T1").is_success
+        assert _task_res(res, "T2").is_skipped
+        assert _task_res(res, "T3").is_success
 
     def test_one_success_trigger_rule(self):
         """Under ONE_SUCCESS: task runs if at least one dependency succeeded."""
+        def fail_fn(ctx):
+            raise RuntimeError("Task failed intentionally")
+
         wf = Workflow("OneSuccessWF")
-        t_fail = FunctionTask("FailTask", fn=lambda ctx: 1 / 0, failure_strategy=FailureStrategy.CONTINUE)
+        t_fail = FunctionTask("FailTask", fn=fail_fn, failure_strategy=FailureStrategy.CONTINUE)
         t_ok = FunctionTask("OkTask", fn=lambda ctx: "good")
         t_down = FunctionTask("Downstream", fn=lambda ctx: "proceed", trigger_rule=TriggerRule.ONE_SUCCESS)
         t_down.add_dependency(t_fail)
@@ -225,16 +234,19 @@ class TestTriggerRules:
 
         engine = Engine(verbose=False)
         res = engine.run(wf)
-        assert res.get_task_result("OkTask").is_success
-        assert res.get_task_result("FailTask").is_failed
-        assert res.get_task_result("Downstream").is_success
+        assert _task_res(res, "OkTask").is_success
+        assert _task_res(res, "FailTask").is_failed
+        assert _task_res(res, "Downstream").is_success
 
     def test_all_failed_trigger_rule(self):
         """Under ALL_FAILED: incident alert runs only when upstream tasks fail."""
         alert_sent = []
 
+        def fail_fn(ctx):
+            raise RuntimeError("Task failed intentionally")
+
         wf = Workflow("AllFailedAlert")
-        t_fail = FunctionTask("BrokenTask", fn=lambda ctx: 1 / 0, failure_strategy=FailureStrategy.CONTINUE)
+        t_fail = FunctionTask("BrokenTask", fn=fail_fn, failure_strategy=FailureStrategy.CONTINUE)
         t_alert = FunctionTask(
             "SendAlert",
             fn=lambda ctx: alert_sent.append(True),
@@ -245,8 +257,8 @@ class TestTriggerRules:
 
         engine = Engine(verbose=False)
         res = engine.run(wf)
-        assert res.get_task_result("BrokenTask").is_failed
-        assert res.get_task_result("SendAlert").is_success
+        assert _task_res(res, "BrokenTask").is_failed
+        assert _task_res(res, "SendAlert").is_success
         assert len(alert_sent) == 1
 
 
@@ -298,10 +310,10 @@ class TestDeclarativeConditionalWorkflows:
             res = engine.run(wf)
 
             assert res.status == WorkflowStatus.SUCCESS
-            assert res.get_task_result("write_artifact").is_success
-            assert res.get_task_result("deploy_prod").is_success
-            assert res.get_task_result("deploy_staging").is_skipped
-            assert res.get_task_result("cleanup").is_success
+            assert _task_res(res, "write_artifact").is_success
+            assert _task_res(res, "deploy_prod").is_success
+            assert _task_res(res, "deploy_staging").is_skipped
+            assert _task_res(res, "cleanup").is_success
 
             assert (tmp_path / "prod.txt").exists()
             assert not (tmp_path / "staging.txt").exists()
@@ -342,8 +354,8 @@ class TestDeclarativeConditionalWorkflows:
             res = engine.run(wf)
 
             assert res.status == WorkflowStatus.SUCCESS
-            assert res.get_task_result("deploy_prod").is_skipped
-            assert res.get_task_result("deploy_staging").is_success
+            assert _task_res(res, "deploy_prod").is_skipped
+            assert _task_res(res, "deploy_staging").is_success
             assert not (tmp_path / "prod.txt").exists()
             assert (tmp_path / "staging.txt").exists()
 
