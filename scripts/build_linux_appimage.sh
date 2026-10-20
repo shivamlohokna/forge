@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-VERSION="${1:-0.3.0}"
+VERSION="${1:-0.3.1}"
 ARCH="$(uname -m)"          # x86_64 or aarch64
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUNDLE_DIR="$REPO_ROOT/dist/ForgeDesktop"
@@ -56,7 +56,7 @@ mkdir -p "$APPDIR/usr/bin"
 cp -R "$BUNDLE_DIR" "$APPDIR/usr/bin/ForgeDesktop"
 
 # Copy application icon to the root of AppDir (required by appimagetool)
-cp "$REPO_ROOT/forge/resources/icons/forge.png" "$APPDIR/forge.png"
+cp "$REPO_ROOT/assets/forge_icon.png" "$APPDIR/forge.png"
 
 # ── .desktop file ───────────────────────────────────────────────────────────
 cat > "$APPDIR/ForgeDesktop.desktop" << 'EOF'

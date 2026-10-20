@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-VERSION="${1:-0.3.0}"
+VERSION="${1:-0.3.1}"
 ARCH="$(uname -m)"          # arm64 or x86_64
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="$REPO_ROOT/dist/ForgeDesktop.app"

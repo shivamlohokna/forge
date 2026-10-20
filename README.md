@@ -109,9 +109,9 @@ python -m pip install ".[gui]"
 ```
 
 #### Option B: Install from Downloaded Wheel
-Download the verified wheel from the [v0.3.0 Release](https://github.com/shivamlohokna/forge/releases/tag/v0.3.0):
+Download the verified wheel from the [v0.3.1 Release](https://github.com/shivamlohokna/forge/releases/tag/v0.3.1):
 ```bash
-python -m pip install https://github.com/shivamlohokna/forge/releases/download/v0.3.0/forge-0.3.0-py3-none-any.whl
+python -m pip install https://github.com/shivamlohokna/forge/releases/download/v0.3.1/forge-0.3.1-py3-none-any.whl
 
 # To include desktop GUI dependencies:
 python -m pip install "PySide6>=6.5.0"
@@ -353,16 +353,16 @@ Forge Desktop provides a native graphical application for **Windows**, **macOS (
 
 ### Standalone Desktop Installers (Zero Python Install)
 
-Prebuilt standalone binaries are available from the [**Forge v0.3.0 Release**](https://github.com/shivamlohokna/forge/releases/tag/v0.3.0):
+Prebuilt standalone binaries are available from the [**Forge v0.3.1 Release**](https://github.com/shivamlohokna/forge/releases/tag/v0.3.1):
 
-- **Windows (x86_64)**: [**`ForgeDesktop-0.3.0-Windows-x86_64-Setup.exe`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-Windows-x86_64-Setup.exe) (36.8 MB)  
-  Setup wizard creating Start Menu and Desktop shortcuts. Silent install: `/VERYSILENT /NORESTART`.
+- **Windows (x86_64)**: [**`ForgeDesktop-0.3.1-Windows-x86_64-Setup.exe`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-Windows-x86_64-Setup.exe)  
+  Setup wizard creating Start Menu and Desktop shortcuts with updated Forge branding. Silent install: `/VERYSILENT /NORESTART`.
 - **macOS (Apple Silicon ARM64 only — M1/M2/M3/M4)**:  
-  - [**`ForgeDesktop-0.3.0-macOS-arm64.dmg`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.dmg) (45.7 MB)
-  - [**`ForgeDesktop-0.3.0-macOS-arm64.app.zip`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.app.zip) (40.2 MB)  
+  - [**`ForgeDesktop-0.3.1-macOS-arm64.dmg`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-macOS-arm64.dmg)
+  - [**`ForgeDesktop-0.3.1-macOS-arm64.app.zip`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-macOS-arm64.app.zip)  
   *Drag to `/Applications` and launch. Requires macOS 12.0 (Monterey) or newer.*  
   > **macOS Architecture Notice**: Prebuilt macOS binaries are **Apple Silicon (`arm64`) only**. Native Intel Mac (`x86_64`) prebuilt binaries are not currently included in the published release (Apple's Rosetta 2 only translates x86_64 binaries to run on ARM64 hardware; it cannot run ARM64 binaries on Intel Macs). Intel Mac users can install and run Forge from source via Python.
-- **Linux (x86_64)**: [**`ForgeDesktop-0.3.0-Linux-x86_64.AppImage`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-Linux-x86_64.AppImage) (85.2 MB)  
+- **Linux (x86_64)**: [**`ForgeDesktop-0.3.1-Linux-x86_64.AppImage`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-Linux-x86_64.AppImage)  
   Self-contained portable AppImage for Linux distributions with glibc ≥ 2.35 (e.g., Ubuntu 22.04+). Run `chmod +x` and execute directly. Requires FUSE (`libfuse2`).
 
 ### Running Forge Desktop from Source

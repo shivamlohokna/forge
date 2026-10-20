@@ -158,8 +158,8 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName":               "Forge",
             "CFBundleDisplayName":        "Forge Desktop",
-            "CFBundleVersion":            "0.3.0",
-            "CFBundleShortVersionString": "0.3.0",
+            "CFBundleVersion":            "0.3.1",
+            "CFBundleShortVersionString": "0.3.1",
             "CFBundleIdentifier":         "io.github.shivamlohokna.forge",
             "CFBundleExecutable":         "ForgeDesktop",
             "CFBundleIconFile":           "forge",

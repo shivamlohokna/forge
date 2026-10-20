@@ -2,7 +2,7 @@
 ; Produces a Windows installer with desktop and Start menu shortcuts.
 
 #define MyAppName "Forge"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.3.1"
 #define MyAppPublisher "Forge Project"
 #define MyAppURL "https://github.com/shivamlohokna/forge"
 #define MyAppExeName "ForgeDesktop.exe"
@@ -20,7 +20,7 @@ DisableProgramGroupPage=yes
 LicenseFile=LICENSE
 OutputDir=dist\installer
 OutputBaseFilename=ForgeDesktop-{#MyAppVersion}-Windows-x86_64-Setup
-SetupIconFile=forge\resources\icons\forge.ico
+SetupIconFile=assets\forge_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes

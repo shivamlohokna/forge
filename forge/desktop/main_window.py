@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from forge import __version__
 from forge.desktop.paths import ensure_app_directories, get_icon_path
 from forge.desktop.styles import (
     BACKGROUND_DARK,
@@ -100,7 +101,7 @@ class ForgeMainWindow(QWidget):
         sidebar_layout.addStretch()
 
         # Version badge at bottom of sidebar
-        version_lbl = QLabel("v0.3.0")
+        version_lbl = QLabel(f"v{__version__}")
         version_lbl.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 11px; padding: 4px;")
         sidebar_layout.addWidget(version_lbl)
 

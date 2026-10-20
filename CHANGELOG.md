@@ -5,6 +5,22 @@ All notable changes to the Forge platform will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-10-20
+
+### Forge Desktop — Updated Branding & Asset Refresh
+
+Rebuilds all desktop installers (Windows Setup EXE, macOS DMG, Linux AppImage) and Python wheel packages with new high-resolution Forge branding.
+
+#### Changed
+- **New Forge App Branding**:
+  - Replaced application icons with high-resolution master asset (`assets/forge_icon.png`).
+  - Added multi-resolution Windows icon (`assets/forge_icon.ico`) and macOS icon (`assets/forge_icon.icns`).
+  - Updated `forge_desktop.spec` to bind platform-specific icons from `assets/` (.ico for Windows, .icns for macOS, .png for Linux).
+  - Updated Inno Setup installer script (`installer.iss`) to use `assets\forge_icon.ico`.
+  - Updated Linux AppImage packaging (`scripts/build_linux_appimage.sh`) to bundle `assets/forge_icon.png`.
+- **Automated GitHub Release Pipeline**:
+  - Added automated release job to `.github/workflows/ci.yml` triggered on version tag pushes (`v*`) to package and publish release artifacts.
+
 ---
 
 ## [0.3.0] - 2026-10-12

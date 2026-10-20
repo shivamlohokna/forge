@@ -105,7 +105,7 @@ forge-gui
 In standalone distributions:
 - **Windows**: `dist\ForgeDesktop\ForgeDesktop.exe` (or via Setup installer)
 - **macOS**: `dist/ForgeDesktop.app` (or via DMG)
-- **Linux**: `dist/installer/ForgeDesktop-0.3.0-Linux-x86_64.AppImage`
+- **Linux**: `dist/installer/ForgeDesktop-0.3.1-Linux-x86_64.AppImage`
 
 ---
 
@@ -113,7 +113,7 @@ In standalone distributions:
 
 ### 5.1. Windows — Inno Setup Installer
 - **`forge_desktop.spec`**: PyInstaller spec → `dist/ForgeDesktop/ForgeDesktop.exe` (directory bundle).
-- **`installer.iss`**: Inno Setup → `ForgeDesktop-0.3.0-Windows-x86_64-Setup.exe`.
+- **`installer.iss`**: Inno Setup → `ForgeDesktop-0.3.1-Windows-x86_64-Setup.exe`.
 - Creates Start Menu and Desktop shortcuts.
 - Preserves `%APPDATA%\Forge` (user data) on uninstall.
 - CI job: `desktop-packaging` on `windows-latest`.
@@ -149,13 +149,13 @@ Download the package for your architecture:
 
 | Architecture | Package / Installation Method |
 |--------------|------------------------------|
-| **Apple Silicon (M1/M2/M3/M4)** | [**`ForgeDesktop-0.3.0-macOS-arm64.dmg`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.dmg) & [**`ForgeDesktop-0.3.0-macOS-arm64.app.zip`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-macOS-arm64.app.zip) |
+| **Apple Silicon (M1/M2/M3/M4)** | [**`ForgeDesktop-0.3.1-macOS-arm64.dmg`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-macOS-arm64.dmg) & [**`ForgeDesktop-0.3.1-macOS-arm64.app.zip`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-macOS-arm64.app.zip) |
 | **Intel (x86_64)** | *Prebuilt standalone binary not available.* Install from repository source via Python 3.11+: `git clone https://github.com/shivamlohokna/forge.git && cd forge && pip install ".[gui]"` |
 
 > [!IMPORTANT]
 > **Architecture & Rosetta Notice**: Prebuilt macOS desktop binaries are exclusively built for **Apple Silicon (`arm64`)**. Apple's Rosetta 2 translation environment only runs x86_64 binaries on Apple Silicon hardware; it **cannot** translate or run ARM64 binaries on Intel Macs. Do not attempt to run the ARM64 DMG on Intel hardware. Intel Mac users should run Forge from source.
 
-1. Open `ForgeDesktop-0.3.0-macOS-arm64.dmg` and drag `ForgeDesktop.app` into `/Applications`.
+1. Open `ForgeDesktop-0.3.1-macOS-arm64.dmg` and drag `ForgeDesktop.app` into `/Applications`.
 2. Double-click to launch.
 
 > **Gatekeeper (unsigned builds)**: Right-click → Open → Open, or run:
@@ -169,11 +169,11 @@ Minimum macOS version: **12.0 (Monterey)**.
 
 ## 8. Linux Installation
 
-Download: [**`ForgeDesktop-0.3.0-Linux-x86_64.AppImage`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.0/ForgeDesktop-0.3.0-Linux-x86_64.AppImage)
+Download: [**`ForgeDesktop-0.3.1-Linux-x86_64.AppImage`**](https://github.com/shivamlohokna/forge/releases/download/v0.3.1/ForgeDesktop-0.3.1-Linux-x86_64.AppImage)
 
 ```bash
-chmod +x ForgeDesktop-0.3.0-Linux-x86_64.AppImage
-./ForgeDesktop-0.3.0-Linux-x86_64.AppImage
+chmod +x ForgeDesktop-0.3.1-Linux-x86_64.AppImage
+./ForgeDesktop-0.3.1-Linux-x86_64.AppImage
 ```
 
 **Required host libraries** (not bundled in the AppImage):
@@ -215,9 +215,9 @@ Credentials are **never logged or exposed** in CI output.
 
 | Item | Status |
 |------|--------|
-| Windows Inno Setup installer | ✅ v0.2.0 |
-| macOS .app + .dmg (Apple Silicon arm64) | ✅ v0.3.0 |
-| Linux x86_64 AppImage | ✅ v0.3.0 |
+| Windows Inno Setup installer | ✅ v0.3.1 |
+| macOS .app + .dmg (Apple Silicon arm64) | ✅ v0.3.1 |
+| Linux x86_64 AppImage | ✅ v0.3.1 |
 | macOS Intel (x86_64) native desktop bundle | 🔲 Requires supported Intel build infrastructure |
 | macOS Developer ID signing + notarization | 🔲 Requires Apple Developer credentials |
 | Linux aarch64 AppImage | 🔲 Future |
