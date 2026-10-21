@@ -102,7 +102,8 @@ class HTTPTask(Task):
         data: str | bytes | None = None,
         json_data: dict[str, Any] | list[Any] | None = None,
         from_upstream: str | None = None,
-        allowed_status_codes: list[int] | set[int] | None = None,
+        allowed_status_codes: list[int] | set[int] | tuple[int, ...] | None = None,
+        expected_status: int | list[int] | set[int] | tuple[int, ...] | None = None,
         auth: tuple[str, str] | None = None,
         bearer_token: str | None = None,
         task_id: str | None = None,
@@ -134,17 +135,7 @@ class HTTPTask(Task):
             raise ValueError(f"HTTPTask '{self.name}' requires a non-empty 'url'.")
 
         self.url: str = url.strip()
-
-        if isinstance(method, str):
-            try:
-                self.method: HTTPMethod = HTTPMethod(method.upper())
-            except ValueError:
-                valid = [m.value for m in HTTPMethod]
-                raise ValueError(
-                    f"Invalid HTTP method '{method}'. Must be one of: {valid}"
-                )
-        else:
-            self.method = method
+        self.method = method
 
         self.params: dict[str, Any] = params or {}
         self.headers: dict[str, str] = {k.lower(): v for k, v in (headers or {}).items()}
@@ -153,10 +144,101 @@ class HTTPTask(Task):
         self.from_upstream: str | None = from_upstream
         self.auth: tuple[str, str] | None = auth
         self.bearer_token: str | None = bearer_token
+        self.last_result: HTTPResult | None = None
 
-        # Default allowed status codes: 200..299
-        self.allowed_status_codes: set[int] | None = (
-            set(allowed_status_codes) if allowed_status_codes is not None else None
+        self._used_expected_status: bool = expected_status is not None
+
+        norm_expected = self._normalize_status_codes(expected_status, "expected_status")
+        norm_allowed = self._normalize_status_codes(allowed_status_codes, "allowed_status_codes")
+
+        if norm_expected is not None and norm_allowed is not None:
+            effective_codes = norm_expected | norm_allowed
+        elif norm_expected is not None:
+            effective_codes = norm_expected
+        elif norm_allowed is not None:
+            effective_codes = norm_allowed
+        else:
+            effective_codes = None
+
+        self._effective_status_codes: set[int] | None = effective_codes
+
+    @property
+    def method(self) -> HTTPMethod:
+        return self._method
+
+    @method.setter
+    def method(self, value: HTTPMethod | str) -> None:
+        if isinstance(value, str):
+            try:
+                self._method = HTTPMethod(value.upper())
+            except ValueError:
+                valid = [m.value for m in HTTPMethod]
+                raise ValueError(
+                    f"Invalid HTTP method '{value}'. Must be one of: {valid}"
+                )
+        elif isinstance(value, HTTPMethod):
+            self._method = value
+        else:
+            self._method = HTTPMethod(str(value).upper())
+
+    @property
+    def method_value(self) -> str:
+        """String representation of the HTTP method (e.g. 'GET')."""
+        if hasattr(self, "_method") and hasattr(self._method, "value"):
+            return str(self._method.value)
+        return str(getattr(self, "_method", "GET")).upper()
+
+    @property
+    def expected_status(self) -> set[int] | None:
+        return self._effective_status_codes
+
+    @expected_status.setter
+    def expected_status(self, val: Any) -> None:
+        if val is not None:
+            self._used_expected_status = True
+        self._effective_status_codes = self._normalize_status_codes(val, "expected_status")
+
+    @property
+    def allowed_status_codes(self) -> set[int] | None:
+        return self._effective_status_codes
+
+    @allowed_status_codes.setter
+    def allowed_status_codes(self, val: Any) -> None:
+        self._effective_status_codes = self._normalize_status_codes(val, "allowed_status_codes")
+
+    def _normalize_status_codes(
+        self,
+        val: Any,
+        param_name: str,
+    ) -> set[int] | None:
+        """Validate and normalize status codes to a set of integers."""
+        if val is None:
+            return None
+        if isinstance(val, bool):
+            raise ValueError(
+                f"HTTPTask '{self.name}': '{param_name}' cannot be a boolean, got {val!r}."
+            )
+        if isinstance(val, int):
+            if val < 100 or val > 599:
+                raise ValueError(
+                    f"HTTPTask '{self.name}': '{param_name}' code must be between 100 and 599, got {val}."
+                )
+            return {val}
+        if isinstance(val, (list, tuple, set, frozenset)):
+            codes: set[int] = set()
+            for item in val:
+                if isinstance(item, bool) or not isinstance(item, int):
+                    raise ValueError(
+                        f"HTTPTask '{self.name}': elements of '{param_name}' must be integers, got {item!r}."
+                    )
+                if item < 100 or item > 599:
+                    raise ValueError(
+                        f"HTTPTask '{self.name}': '{param_name}' code must be between 100 and 599, got {item}."
+                    )
+                codes.add(item)
+            return codes
+        raise ValueError(
+            f"HTTPTask '{self.name}': '{param_name}' must be an int or collection of ints, got {type(val).__name__}."
         )
 
     def execute(self, context: ExecutionContext) -> HTTPResult:
@@ -178,7 +260,7 @@ class HTTPTask(Task):
             url=full_url,
             data=payload_bytes,
             headers=req_headers,
-            method=self.method.value,
+            method=self.method_value,
         )
 
         start_time = time.perf_counter()
@@ -197,14 +279,14 @@ class HTTPTask(Task):
         except urllib.error.URLError as url_err:
             if isinstance(url_err.reason, TimeoutError) or "timed out" in str(url_err.reason).lower():
                 raise TaskTimeoutError(
-                    f"HTTP {self.method.value} '{full_url}' timed out after {self.timeout:.2f}s."
+                    f"HTTP {self.method_value} '{full_url}' timed out after {self.timeout:.2f}s."
                 )
             raise TaskExecutionError(
-                f"HTTP {self.method.value} '{full_url}' network error: {url_err.reason}"
+                f"HTTP {self.method_value} '{full_url}' network error: {url_err.reason}"
             )
         except TimeoutError:
             raise TaskTimeoutError(
-                f"HTTP {self.method.value} '{full_url}' timed out after {self.timeout:.2f}s."
+                f"HTTP {self.method_value} '{full_url}' timed out after {self.timeout:.2f}s."
             )
 
         duration = time.perf_counter() - start_time
@@ -217,29 +299,32 @@ class HTTPTask(Task):
 
         http_result = HTTPResult(
             url=full_url,
-            method=self.method.value,
+            method=self.method_value,
             status_code=status_code,
             headers=sanitized_headers,
             body=raw_body,
             duration_seconds=duration,
         )
 
-        # Evaluate allowed status codes
+        self.last_result = http_result
+
+        # Evaluate allowed / expected status codes
         if self.allowed_status_codes is not None:
             is_allowed = status_code in self.allowed_status_codes
         else:
             is_allowed = 200 <= status_code < 300
 
         if not is_allowed:
-            allowed_repr = (
+            status_repr = (
                 sorted(self.allowed_status_codes)
                 if self.allowed_status_codes
                 else "200..299"
             )
             preview = raw_body[:200] + "..." if len(raw_body) > 200 else raw_body
+            label = "expected" if self._used_expected_status else "allowed"
             raise TaskExecutionError(
-                f"HTTP {self.method.value} '{full_url}' failed with status {status_code} "
-                f"(allowed: {allowed_repr}).\nResponse body: {preview or '<empty>'}"
+                f"HTTP {self.method_value} '{full_url}' failed with status {status_code} "
+                f"({label}: {status_repr}).\nResponse body: {preview or '<empty>'}"
             )
 
         return http_result
@@ -299,5 +384,5 @@ class HTTPTask(Task):
     def __repr__(self) -> str:
         return (
             f"<HTTPTask id='{self.task_id}' name='{self.name}' "
-            f"method='{self.method.value}' url='{self.url}' status='{self.status.value}'>"
+            f"method='{self.method_value}' url='{self.url}' status='{self.status.value}'>"
         )

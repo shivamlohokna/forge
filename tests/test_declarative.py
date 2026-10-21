@@ -250,3 +250,114 @@ def test_full_chain_plugin_discovery_to_declarative_execution():
 
     assert result.is_success
     assert result.get_task_result("custom_multiplier").output == 32
+
+
+def test_declarative_http_task_with_expected_status_int():
+    """Verify loading declarative HTTP task with expected_status as integer."""
+    raw = {
+        "name": "HTTP Single Expected",
+        "tasks": [
+            {
+                "id": "ping",
+                "type": "http",
+                "params": {
+                    "url": "https://example.com/api",
+                    "expected_status": 200,
+                },
+            }
+        ],
+    }
+    wf = load_declarative_workflow(raw)
+    task = wf.get_task("ping")
+    assert task is not None
+    assert task.expected_status == {200}
+    assert task.allowed_status_codes == {200}
+
+
+def test_declarative_http_task_with_expected_status_list():
+    """Verify loading declarative HTTP task with expected_status as list."""
+    raw = {
+        "name": "HTTP List Expected",
+        "tasks": [
+            {
+                "id": "ping",
+                "type": "http",
+                "params": {
+                    "url": "https://example.com/api",
+                    "expected_status": [200, 201, 204],
+                },
+            }
+        ],
+    }
+    wf = load_declarative_workflow(raw)
+    task = wf.get_task("ping")
+    assert task is not None
+    assert task.expected_status == {200, 201, 204}
+
+
+def test_api_health_monitor_template_loading():
+    """Verify the desktop API Health Monitor starter template loads and validates cleanly."""
+    from forge.desktop.templates import get_template_by_id
+
+    tmpl = get_template_by_id("api_health_monitor")
+    assert tmpl is not None
+    wf = load_declarative_workflow(tmpl["workflow"])
+    assert wf.name == "API Health Monitor"
+    assert wf.has_task("ping_endpoint")
+    assert wf.has_task("record_health_log")
+
+    ping_task = wf.get_task("ping_endpoint")
+    assert ping_task is not None
+    assert ping_task.expected_status == {200}
+
+    log_task = wf.get_task("record_health_log")
+    assert log_task is not None
+    assert ping_task in log_task.dependencies
+
+
+def test_api_pipeline_example_file_loading():
+    """Verify api_pipeline.json examples load and validate without constructor errors."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    for rel_path in [
+        "forge/resources/examples/declarative/api_pipeline.json",
+        "examples/declarative/api_pipeline.json",
+    ]:
+        full_path = repo_root / rel_path
+        if full_path.exists():
+            wf = load_declarative_workflow(full_path)
+            assert wf.name == "APIFetchPipeline"
+            t = wf.get_task("fetch_http_data")
+            assert t is not None
+            assert t.expected_status == {200}
+
+
+@pytest.mark.parametrize(
+    "invalid_status, error_pattern",
+    [
+        (True, r"cannot be a boolean"),
+        ("200", r"must be an integer"),
+        (99, r"status code must be between 100 and 599"),
+        (600, r"status code must be between 100 and 599"),
+        ([200, "invalid"], r"list elements must be integers"),
+        ([200, 750], r"status code must be between 100 and 599"),
+    ],
+)
+def test_declarative_http_invalid_expected_status(invalid_status: Any, error_pattern: str):
+    """Verify validate_workflow_dict rejects malformed expected_status configurations."""
+    raw = {
+        "name": "Invalid HTTP Workflow",
+        "tasks": [
+            {
+                "id": "http_task",
+                "type": "http",
+                "params": {
+                    "url": "https://example.com",
+                    "expected_status": invalid_status,
+                },
+            }
+        ],
+    }
+    with pytest.raises(WorkflowSpecError, match=error_pattern):
+        load_declarative_workflow(raw)

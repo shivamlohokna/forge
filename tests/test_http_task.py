@@ -242,6 +242,80 @@ class TestHTTPTask(unittest.TestCase):
         self.assertEqual(tr.output.status_code, 200)
         self.assertEqual(tr.output.body, "Service Recovered")
 
+    def test_expected_status_single_int_success(self):
+        """HTTPTask accepts expected_status as a single integer and succeeds when matched."""
+        task = HTTPTask(
+            "Expected200",
+            url=f"{self.base_url}/hello",
+            expected_status=200,
+        )
+        self.assertEqual(task.expected_status, {200})
+        self.assertEqual(task.allowed_status_codes, {200})
+
+        wf = Workflow("Expected 200 WF").add_task(task)
+        result = self.engine.run(wf)
+        self.assertTrue(result.is_success)
+        self.assertEqual(result.get_task_result("Expected200").output.status_code, 200)
+
+    def test_expected_status_list_int_success(self):
+        """HTTPTask accepts expected_status as a list of integers and succeeds when matched."""
+        task = HTTPTask(
+            "ExpectedList",
+            url=f"{self.base_url}/not_found",
+            expected_status=[200, 404],
+        )
+        self.assertEqual(task.expected_status, {200, 404})
+
+        wf = Workflow("Expected List WF").add_task(task)
+        result = self.engine.run(wf)
+        self.assertTrue(result.is_success)
+        self.assertEqual(result.get_task_result("ExpectedList").output.status_code, 404)
+
+    def test_expected_status_mismatch_failure(self):
+        """HTTPTask fails and records detailed expected status message on mismatch."""
+        task = HTTPTask(
+            "ExpectedMismatch",
+            url=f"{self.base_url}/not_found",
+            expected_status=200,
+        )
+        wf = Workflow("Mismatch WF").add_task(task)
+        result = self.engine.run(wf)
+
+        self.assertTrue(result.is_failed)
+        tr = result.get_task_result("ExpectedMismatch")
+        self.assertTrue(tr.is_failed)
+        self.assertIn("failed with status 404 (expected: [200])", tr.error_message)
+        self.assertIsNotNone(task.last_result)
+        self.assertEqual(task.last_result.status_code, 404)
+
+    def test_expected_status_invalid_configuration(self):
+        """HTTPTask raises ValueError on malformed or out-of-range expected_status."""
+        with self.assertRaises(ValueError):
+            HTTPTask("BadBool", url="http://localhost", expected_status=True)
+
+        with self.assertRaises(ValueError):
+            HTTPTask("BadStr", url="http://localhost", expected_status="200")
+
+        with self.assertRaises(ValueError):
+            HTTPTask("BadListElem", url="http://localhost", expected_status=[200, "404"])
+
+        with self.assertRaises(ValueError):
+            HTTPTask("BadRangeLow", url="http://localhost", expected_status=99)
+
+        with self.assertRaises(ValueError):
+            HTTPTask("BadRangeHigh", url="http://localhost", expected_status=600)
+
+    def test_expected_status_and_allowed_status_codes_merged(self):
+        """HTTPTask gracefully merges expected_status and allowed_status_codes if both are passed."""
+        task = HTTPTask(
+            "BothParams",
+            url="http://localhost",
+            expected_status=200,
+            allowed_status_codes=[201, 204],
+        )
+        self.assertEqual(task.expected_status, {200, 201, 204})
+        self.assertEqual(task.allowed_status_codes, {200, 201, 204})
+
 
 if __name__ == "__main__":
     unittest.main()

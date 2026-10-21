@@ -106,6 +106,37 @@ def validate_workflow_dict(data: dict[str, Any], registry: TaskRegistry) -> None
                 f"{path_prefix}.type: unknown task type '{clean_type}' for task '{clean_id}'. Registered types: {known}.\nNext step: Run 'forge tasks' to view registered task types."
             )
 
+        # Validate HTTP-specific parameters if present
+        if clean_type == "http":
+            for container in (t_data.get("params"), t_data):
+                if isinstance(container, dict):
+                    for status_key in ("expected_status", "allowed_status_codes"):
+                        if status_key in container:
+                            val = container[status_key]
+                            if isinstance(val, bool):
+                                raise WorkflowSpecError(
+                                    f"{path_prefix}.params.{status_key}: cannot be a boolean."
+                                )
+                            if isinstance(val, int):
+                                if val < 100 or val > 599:
+                                    raise WorkflowSpecError(
+                                        f"{path_prefix}.params.{status_key}: status code must be between 100 and 599, got {val}."
+                                    )
+                            elif isinstance(val, (list, tuple, set)):
+                                for item in val:
+                                    if isinstance(item, bool) or not isinstance(item, int):
+                                        raise WorkflowSpecError(
+                                            f"{path_prefix}.params.{status_key}: list elements must be integers, got {item!r}."
+                                        )
+                                    if item < 100 or item > 599:
+                                        raise WorkflowSpecError(
+                                            f"{path_prefix}.params.{status_key}: status code must be between 100 and 599, got {item}."
+                                        )
+                            else:
+                                raise WorkflowSpecError(
+                                    f"{path_prefix}.params.{status_key}: must be an integer (100-599) or list of integers, got {type(val).__name__}."
+                                )
+
         # Validate failure strategy if present
         strat = t_data.get("failure_strategy")
         if strat is not None:
